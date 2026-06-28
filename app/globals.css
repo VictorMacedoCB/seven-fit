@@ -1,0 +1,429 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  touch-action: pan-x pan-y;
+  -ms-touch-action: pan-x pan-y;
+}
+
+body {
+  background: #0c0c14;
+  background-image:
+    radial-gradient(ellipse 90% 40% at 50% 0%, rgba(249, 115, 22, 0.07) 0%, transparent 70%);
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding-bottom: 90px;
+  position: relative;
+}
+
+.syne {
+  font-family: 'Syne', sans-serif;
+}
+
+/* ─── Cards ──────────────────────────────────────────────────── */
+.card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.058) 0%, rgba(255,255,255,0.018) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 22px;
+  padding: 20px;
+  margin-bottom: 12px;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────── */
+.btn {
+  border: none;
+  border-radius: 14px;
+  padding: 13px 20px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
+  transition: all 0.18s ease;
+  letter-spacing: 0.15px;
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(249, 115, 22, 0.38);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 6px 24px rgba(249, 115, 22, 0.50);
+  background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: 10px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  transition: all 0.18s;
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.22);
+}
+
+/* ─── Inputs ─────────────────────────────────────────────────── */
+input, select, textarea {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 12px 16px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  width: 100%;
+  font-family: 'DM Sans', sans-serif;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: rgba(249, 115, 22, 0.55);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+}
+
+select {
+  background: #131320;
+}
+
+textarea {
+  resize: none;
+}
+
+input::placeholder, textarea::placeholder {
+  color: rgba(255, 255, 255, 0.22);
+}
+
+/* ─── Tab Bar (inspired by iOS 17 + Whoop) ───────────────────── */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: rgba(10, 10, 18, 0.92);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  padding: 8px 10px 20px;
+  z-index: 100;
+  gap: 4px;
+}
+
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border-radius: 16px;
+  opacity: 0.38;
+  transition: opacity 0.2s ease, background 0.22s ease;
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab-btn.active {
+  opacity: 1;
+  background: rgba(249, 115, 22, 0.14);
+}
+
+.tab-btn small {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* Pill dot — hidden, replaced by background fill */
+.dot { display: none; }
+
+/* ─── Sub Tabs (pill container — inspired by Linear) ─────────── */
+.sub-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 4px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.sub-tab {
+  flex: 1;
+  padding: 9px 0;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: 'DM Sans', sans-serif;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  transition: all 0.2s ease;
+  text-align: center;
+  letter-spacing: 0.2px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sub-tab.active {
+  background: #f97316;
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(249, 115, 22, 0.32);
+}
+
+/* ─── Layout Helpers ─────────────────────────────────────────── */
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.row-sb {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.42);
+  margin-bottom: 5px;
+}
+
+.small {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.36);
+}
+
+/* ─── Section Title ──────────────────────────────────────────── */
+.section-title {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.32);
+  margin-bottom: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+/* ─── Food Items ─────────────────────────────────────────────── */
+.food-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  padding: 13px 16px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.15s;
+}
+
+.food-item:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ─── Set Items ──────────────────────────────────────────────── */
+.set-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  margin-bottom: 6px;
+}
+
+/* ─── Tags ───────────────────────────────────────────────────── */
+.tag {
+  font-size: 11px;
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+/* ─── Stat Cards (grid metrics — Whoop/Apple Fitness style) ──── */
+.stat-card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 18px 16px;
+}
+
+/* ─── Grid ───────────────────────────────────────────────────── */
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+/* ─── Exercise Items ─────────────────────────────────────────── */
+.ex-item {
+  padding: 13px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  transition: background 0.15s;
+  border-radius: 10px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ex-item:hover,
+.ex-item:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ─── Workout Items ──────────────────────────────────────────── */
+.workout-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+
+/* ─── Progress Bars (thicker, smoother — Strava style) ───────── */
+.bar-wrap {
+  margin-bottom: 12px;
+}
+
+.bar-track {
+  height: 7px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Photo Slots ────────────────────────────────────────────── */
+.photo-slot {
+  width: 100%;
+  aspect-ratio: 3/4;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 11px;
+  transition: border-color 0.2s, background 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.photo-slot:hover,
+.photo-slot:active {
+  border-color: rgba(249, 115, 22, 0.45);
+  background: rgba(249, 115, 22, 0.04);
+}
+
+.photo-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ─── Modals ─────────────────────────────────────────────────── */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 200;
+  overflow-y: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.modal-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: #141422;
+  border-radius: 26px 26px 0 0;
+  padding: 24px;
+  padding-bottom: 44px;
+  z-index: 200;
+  box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.65);
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  animation: slideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes slideUp {
+  from { transform: translate(-50%, 100%); }
+  to   { transform: translate(-50%, 0);   }
+}
+
+/* ─── Color Dots ─────────────────────────────────────────────── */
+.color-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 3px solid transparent;
+  transition: border-color 0.2s, transform 0.15s;
+}
+
+.color-dot.sel {
+  border-color: #fff;
+  transform: scale(1.12);
+}

@@ -1,0 +1,1476 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { Flame, CheckCircle2, BookOpen, History, X, Plus, Save, Zap, Droplets, Search, ChevronDown, ChevronUp, Trash2, GripVertical } from "lucide-react";
+import exercisesDb from "@/lib/exercises-ptbr.json";
+
+// Sub-grupamentos musculares por tipo de treino
+const MUSCLE_SUBGROUPS = {
+  Push: {
+    "Peito":   ["Supino Reto","Supino Inclinado","Supino Declinado","Crucifixo","Crucifixo Inclinado","Pec Deck","Crossover"],
+    "Ombro":   ["Desenvolvimento com Barra","Desenvolvimento com Halteres","Elevação Lateral","Elevação Frontal","Encolhimento","Face Pull"],
+    "Tríceps": ["Tríceps Corda","Tríceps Testa","Tríceps Francês","Tríceps Banco","Mergulho","Extensão Tríceps"],
+  },
+  Pull: {
+    "Costas":  ["Puxada Frente","Puxada Neutra","Puxada Fechada","Barra Fixa","Pullover","Remada Curvada","Remada Unilateral","Remada Cavalinho","Remada Sentado","Serrote"],
+    "Bíceps":  ["Rosca Direta","Rosca Martelo","Rosca Concentrada","Rosca 21","Rosca Inversa","Rosca Scott"],
+    "Posterior de Ombro": ["Crucifixo Invertido com Halteres", "Crucifixo Invertido na Máquina", "Face Pull"],
+  },
+  Legs: {
+    "Quadríceps": ["Agachamento Livre","Agachamento Smith","Agachamento Sumô","Leg Press","Hack Squat","Cadeira Extensora","Avanço","Avanço com Barra","Agachamento Búlgaro"],
+    "Posterior":  ["Stiff","Mesa Flexora"],
+    "Adutores":   ["Cadeira Adutora","Cadeira Abdutora"],
+    "Panturrilha":["Panturrilha em Pé","Panturrilha Sentado","Panturrilha no Leg Press"],
+    "Abdômen":    [],
+  },
+  Upper: {
+    "Peito":   ["Supino Reto","Supino Inclinado","Crucifixo","Pec Deck"],
+    "Ombro":   ["Desenvolvimento com Halteres","Elevação Lateral","Face Pull"],
+    "Tríceps": ["Tríceps Corda","Tríceps Testa"],
+    "Costas":  ["Puxada Frente","Remada Curvada","Remada Unilateral","Pullover"],
+    "Bíceps":  [],
+  },
+  Lower: {
+    "Pernas":  ["Agachamento Livre","Leg Press","Cadeira Extensora","Mesa Flexora","Stiff","Avanço","Panturrilha em Pé","Panturrilha Sentado"],
+    "Bíceps":  ["Rosca Direta","Rosca Martelo","Rosca Concentrada"],
+    "Abdômen":    [],
+  },
+};
+
+// Retorna o sub-músculo de um exercício dentro de um grupo
+// customMap é passado em runtime para exercícios criados pelo usuário
+function getMuscle(group, name, customMap = {}) {
+  if (customMap[name]) return customMap[name];
+  
+  const normalize = (str) =>
+    str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  const normalizedName = normalize(name);
+  
+  // Try to find in exercisesDb
+  const ex = exercisesDb.find(e => normalize(e.name) === normalizedName);
+  
+  if (ex && ex.primaryMuscles && ex.primaryMuscles.length > 0) {
+    const primary = ex.primaryMuscles[0];
+    const nameNorm = normalizedName;
+
+    if (group === 'Lower') {
+      if (primary === 'biceps') return 'Bíceps';
+      if (primary === 'abdominais') return 'Abdômen';
+      const legsMuscles = ['quadriceps', 'isquiotibiais', 'gluteos', 'panturrilhas', 'adutores', 'abdutores'];
+      if (legsMuscles.includes(primary)) return 'Pernas';
+    }
+
+    if (primary === 'ombros') {
+      const isRearDelt = nameNorm.includes('invertido') || 
+                         nameNorm.includes('inverso') || 
+                         nameNorm.includes('posterior') || 
+                         nameNorm.includes('rear delt') ||
+                         nameNorm.includes('face pull');
+      if (isRearDelt) return group === 'Pull' ? 'Posterior de Ombro' : 'Ombro';
+      return 'Ombro';
+    }
+
+    const map = {
+      'peito': 'Peito',
+      'triceps': 'Tríceps',
+      'trapezio': 'Ombro',
+      'dorsais': 'Costas',
+      'meio-das-costas': 'Costas',
+      'inferior-das-costas': 'Costas',
+      'biceps': 'Bíceps',
+      'antebracos': 'Bíceps',
+      'pescoco': 'Costas',
+      'quadriceps': 'Quadríceps',
+      'isquiotibiais': 'Posterior',
+      'gluteos': 'Posterior',
+      'panturrilhas': 'Panturrilha',
+      'adutores': 'Adutores',
+      'abdutores': 'Adutores',
+      'abdominais': 'Abdômen'
+    };
+
+    return map[primary] || 'Outros';
+  }
+
+  // Fallback to static list matching
+  const subs = MUSCLE_SUBGROUPS[group] || {};
+  for (const [muscle, list] of Object.entries(subs)) {
+    if (list.includes(name)) return muscle;
+  }
+  return "Outros";
+}
+
+export default function WorkoutTab({
+  state,
+  saveSessionWorkout,
+  removeWorkoutLog,
+  getExercises,
+  saveCustomExercise,
+  workoutPlans,
+  saveWorkoutPlan,
+  DEFAULT_EXERCISES,
+  customMuscleMap = {},
+  saveCustomMuscleMap,
+  SET_TYPES,
+  today,
+  fmtDate,
+  openHistoryModal,
+  openGuideModal,
+  openAiPlanModal,
+}) {
+  // Planos dinâmicos: usa os que existem no workoutPlans + fallback se vazio
+  const ALL_GROUPS = workoutPlans && Object.keys(workoutPlans).length
+    ? Object.keys(workoutPlans)
+    : ["Push", "Pull", "Legs"];
+
+  const [activeSubTab, setActiveSubTab] = useState("session");
+  const [histWrkDate, setHistWrkDate] = useState("");
+  
+  const [sessionDate, setSessionDate] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("co_active_sessionDate") || today();
+    }
+    return today();
+  });
+  
+  const [selectedGroup, setSelectedGroup] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("co_active_selectedGroup") || null;
+    }
+    return null;
+  });
+
+  const [sessionStarted, setSessionStarted] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("co_active_sessionStarted") === "true";
+    }
+    return false;
+  });
+
+  // Sessão: lista de exercícios com sets
+  const [sessionExs, setSessionExs] = useState(() => {
+    if (typeof window !== "undefined") {
+      const savedStarted = localStorage.getItem("co_active_sessionStarted") === "true";
+      if (savedStarted) {
+        const savedExs = localStorage.getItem("co_active_sessionExs");
+        if (savedExs) {
+          try {
+            return JSON.parse(savedExs);
+          } catch (e) {
+            console.error("Failed to parse saved sessionExs:", e);
+          }
+        }
+      }
+    }
+    return [];
+  });
+
+  const [sessionNotes, setSessionNotes] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("co_active_sessionNotes") || "";
+    }
+    return "";
+  });
+
+
+  const [expandedEx, setExpandedEx] = useState(null); // índice do card aberto
+  const [serieType, setSerieType] = useState("valida");
+  const [serieWeight, setSerieWeight] = useState("");
+  const [serieReps, setSerieReps] = useState("");
+  const [draggedExIdx, setDraggedExIdx] = useState(null);
+
+  // Busca para adicionar exercício extra
+  const [showAddEx, setShowAddEx] = useState(false);
+  const [exSearch, setExSearch] = useState("");
+  const [newExName, setNewExName] = useState("");
+  const [newExGroup, setNewExGroup] = useState(null);
+  const [newExMuscle, setNewExMuscle] = useState(null);
+
+  // Plano sub-tab
+  const [showNewPlan, setShowNewPlan] = useState(false);
+  const [newPlanName, setNewPlanName] = useState("");
+  const [planGroup, setPlanGroup] = useState("Push");
+  const [planSearch, setPlanSearch] = useState("");
+  const [showLibrary, setShowLibrary] = useState(false);
+
+  // Cardio & Gasto Calórico states
+  const [weightDuration, setWeightDuration] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("co_active_weightDuration") || "60";
+    }
+    return "60";
+  });
+  
+  const [weightKcal, setWeightKcal] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("co_active_weightKcal") || "360";
+    }
+    return "360";
+  });
+
+  const [cardios, setCardios] = useState(() => {
+    if (typeof window !== "undefined") {
+      const savedCardios = localStorage.getItem("co_active_cardios");
+      if (savedCardios) {
+        try {
+          return JSON.parse(savedCardios);
+        } catch (e) {
+          console.error("Failed to parse saved cardios:", e);
+        }
+      }
+    }
+    return [];
+  });
+  
+  const [showCardioForm, setShowCardioForm] = useState(false);
+  const [cardioType, setCardioType] = useState("Corrida");
+  const [cardioDuration, setCardioDuration] = useState("");
+  const [cardioDistance, setCardioDistance] = useState("");
+  const [cardioKcalOverride, setCardioKcalOverride] = useState("");
+
+  const estimateCardioKcal = (type, min) => {
+    const minutes = parseFloat(min);
+    if (isNaN(minutes) || minutes <= 0) return 0;
+    const rates = {
+      "Corrida": 12.5,
+      "Caminhada": 5.0,
+      "Bicicleta": 8.0,
+      "Elíptico": 9.5,
+      "Outro": 7.0
+    };
+    const rate = rates[type] || 7.0;
+    return Math.round(minutes * rate);
+  };
+
+  const estimateWeightKcal = (min) => {
+    const minutes = parseFloat(min);
+    if (isNaN(minutes) || minutes <= 0) return 0;
+    return Math.round(minutes * 6.0);
+  };
+
+  // ── helpers ─────────────────────────────────────────────────
+  const setTypeIcon = (id, size = 13) => {
+    if (id === "aquecimento") return <Flame size={size} />;
+    if (id === "pap")         return <Zap size={size} />;
+    if (id === "feeder")      return <Droplets size={size} />;
+    return <CheckCircle2 size={size} />;
+  };
+
+  function schedForDate(dateStr) {
+    const d = new Date(dateStr + "T12:00:00");
+    const dow = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"][d.getDay()];
+    const schedule = state?.schedule || [
+      { day: "Seg", type: "Push", color: "#f97316", calType: "normal", group: "Push" },
+      { day: "Ter", type: "Pull", color: "#3b82f6", calType: "normal", group: "Pull" },
+      { day: "Qua", type: "Legs 🦵", color: "#8b5cf6", calType: "heavy", group: "Legs" },
+      { day: "Qui", type: "Jiu-Jitsu 🥋", color: "#10b981", calType: "normal", group: "Upper" },
+      { day: "Sex", type: "Upper", color: "#f59e0b", calType: "normal", group: "Upper" },
+      { day: "Sab", type: "Lower 🦵", color: "#ec4899", calType: "heavy", group: "Lower" },
+      { day: "Dom", type: "Descanso 🍕", color: "#6b7280", calType: "free", group: null }
+    ];
+    return schedule.find((x) => x.day === dow) || schedule[6];
+  }
+
+  const s = schedForDate(sessionDate);
+  const activeGroup = selectedGroup || s.group;
+
+  // Derived values for default weight training session info
+  const existingWorkout = (state.workoutLogs || []).find(w => w.date === sessionDate);
+  const displayDuration = sessionStarted ? weightDuration : (existingWorkout ? "0" : "60");
+  const displayKcal = sessionStarted ? weightKcal : (existingWorkout ? "0" : "360");
+
+  // Inicializa sessão com exercícios do plano quando grupo muda
+  useEffect(() => {
+    if (!sessionStarted && activeGroup) {
+      const plan = (workoutPlans && workoutPlans[activeGroup]) || [];
+      const currentNames = sessionExs.map((e) => e.name);
+      const isDifferent = plan.length !== currentNames.length || plan.some((name, i) => name !== currentNames[i]);
+      if (isDifferent) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSessionExs(plan.map((name) => ({ name, sets: [] })));
+      }
+    }
+  }, [activeGroup, sessionStarted, workoutPlans, sessionExs]);
+
+  // Save active session to localStorage on change
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (sessionStarted) {
+        localStorage.setItem("co_active_sessionStarted", "true");
+        localStorage.setItem("co_active_sessionExs", JSON.stringify(sessionExs));
+        localStorage.setItem("co_active_sessionNotes", sessionNotes);
+        localStorage.setItem("co_active_weightDuration", weightDuration);
+        localStorage.setItem("co_active_weightKcal", weightKcal);
+        localStorage.setItem("co_active_cardios", JSON.stringify(cardios));
+        localStorage.setItem("co_active_sessionDate", sessionDate);
+        if (selectedGroup) {
+          localStorage.setItem("co_active_selectedGroup", selectedGroup);
+        } else {
+          localStorage.removeItem("co_active_selectedGroup");
+        }
+      } else {
+        localStorage.removeItem("co_active_sessionStarted");
+        localStorage.removeItem("co_active_sessionExs");
+        localStorage.removeItem("co_active_sessionNotes");
+        localStorage.removeItem("co_active_weightDuration");
+        localStorage.removeItem("co_active_weightKcal");
+        localStorage.removeItem("co_active_cardios");
+        localStorage.removeItem("co_active_sessionDate");
+        localStorage.removeItem("co_active_selectedGroup");
+      }
+    }
+  }, [sessionStarted, sessionExs, sessionNotes, weightDuration, weightKcal, cardios, sessionDate, selectedGroup]);
+
+  // Performance anterior
+  const getPrevPerf = (exName) => {
+    const logs = state.workoutLogs || [];
+    const all = [];
+    logs.forEach((w) => w.exercises.forEach((ex) => {
+      if (ex.name === exName) all.push({ date: w.date, sets: ex.sets });
+    }));
+    if (!all.length) return null;
+    const last = all[all.length - 1];
+    const vs = last.sets.filter((x) => x.type === "valida");
+    if (!vs.length) return null;
+    const mx = vs.reduce((a, x) => (x.weight > a.weight ? x : a), vs[0]);
+    const vol = vs.reduce((a, x) => a + x.weight * x.reps, 0);
+    return { lastWeight: mx.weight, lastReps: mx.reps, vol };
+  };
+
+  // Efeito para auto-preencher carga/reps ao expandir card ou adicionar exercício
+  useEffect(() => {
+    if (expandedEx !== null && expandedEx !== undefined && sessionExs[expandedEx]) {
+      const ex = sessionExs[expandedEx];
+      if (ex.sets && ex.sets.length > 0) {
+        const lastSet = ex.sets[ex.sets.length - 1];
+        setSerieWeight(String(lastSet.weight));
+        setSerieReps(String(lastSet.reps));
+      } else {
+        const prev = getPrevPerf(ex.name);
+        if (prev) {
+          setSerieWeight(String(prev.lastWeight));
+          setSerieReps(String(prev.lastReps));
+        } else {
+          setSerieWeight("");
+          setSerieReps("");
+        }
+      }
+    }
+  }, [expandedEx, sessionExs]);
+
+  // ── handlers de séries ───────────────────────────────────────
+  const handleAddSet = (exIdx) => {
+    const w = parseFloat(serieWeight);
+    const r = parseInt(serieReps);
+    if (isNaN(w) || isNaN(r) || w <= 0 || r <= 0) return;
+    setSessionStarted(true);
+    setSessionExs((prev) =>
+      prev.map((ex, i) =>
+        i === exIdx ? { ...ex, sets: [...ex.sets, { type: serieType, weight: w, reps: r }] } : ex
+      )
+    );
+    // Não limpa mais os inputs para permitir adicionar séries idênticas rapidamente
+  };
+
+  const handleRemoveSet = (exIdx, setIdx) => {
+    setSessionStarted(true);
+    setSessionExs((prev) =>
+      prev.map((ex, i) =>
+        i === exIdx ? { ...ex, sets: ex.sets.filter((_, si) => si !== setIdx) } : ex
+      )
+    );
+  };
+
+  const handleRemoveEx = (exIdx) => {
+    setSessionExs((prev) => prev.filter((_, i) => i !== exIdx));
+    setSessionStarted(true);
+    if (expandedEx === exIdx) setExpandedEx(null);
+    else if (expandedEx > exIdx) setExpandedEx((p) => p - 1);
+  };
+
+  const handleAddExToSession = (name) => {
+    if (sessionExs.some((e) => e.name === name)) return;
+    setSessionExs((prev) => {
+      const newExs = [...prev, { name, sets: [] }];
+      // Auto-expande o novo card de exercício
+      setExpandedEx(newExs.length - 1);
+      return newExs;
+    });
+    setSessionStarted(true);
+    // O painel agora fica aberto para permitir múltiplos cadastros
+    setExSearch("");
+  };
+
+  const handleSaveWorkout = () => {
+    const finalExs = sessionExs.filter((ex) => ex.sets.length > 0);
+    
+    const wDur = parseInt(displayDuration);
+    const wKcal = parseInt(displayKcal);
+    if (finalExs.length > 0 && wDur > 0) {
+      finalExs.push({
+        name: "Treino de Força (Info)",
+        isMetadata: true,
+        duration: wDur,
+        kcal: wKcal
+      });
+    }
+    
+    cardios.forEach(c => {
+      finalExs.push({
+        name: `Cardio (${c.type})`,
+        isCardio: true,
+        cardioType: c.type,
+        duration: c.duration,
+        distance: c.distance,
+        kcal: c.kcal
+      });
+    });
+
+    if (!finalExs.length) return;
+
+    const volume = finalExs
+      .filter(ex => !ex.isCardio && !ex.isMetadata)
+      .reduce((tot, ex) =>
+        tot + ex.sets.filter((x) => x.type === "valida").reduce((a, x) => a + x.weight * x.reps, 0), 0);
+
+    saveSessionWorkout({ date: sessionDate, type: s.type, exercises: finalExs, notes: sessionNotes, volume });
+    setSessionExs(activeGroup ? (workoutPlans[activeGroup] || []).map((n) => ({ name: n, sets: [] })) : []);
+    setSessionNotes("");
+    setSessionStarted(false);
+    setExpandedEx(null);
+    setWeightDuration("60");
+    setWeightKcal("360");
+    setCardios([]);
+    setShowCardioForm(false);
+  };
+
+  const resetSession = () => {
+    setSessionExs(activeGroup ? (workoutPlans[activeGroup] || []).map((n) => ({ name: n, sets: [] })) : []);
+    setSessionNotes("");
+    setSessionStarted(false);
+    setExpandedEx(null);
+    setWeightDuration("60");
+    setWeightKcal("360");
+    setCardios([]);
+    setShowCardioForm(false);
+  };
+
+  // ── handlers de plano ────────────────────────────────────────
+  const planExercises = (workoutPlans && workoutPlans[planGroup]) || [];
+  const libraryExs = (DEFAULT_EXERCISES && DEFAULT_EXERCISES[planGroup]) || [];
+  const allForGroup = getExercises ? getExercises(planGroup) : libraryExs;
+  const filteredLib = planSearch
+    ? allForGroup.filter((e) => e.toLowerCase().includes(planSearch.toLowerCase()))
+    : allForGroup;
+
+  const addToPlan = (name) => {
+    if (planExercises.includes(name)) return;
+    saveWorkoutPlan(planGroup, [...planExercises, name]);
+  };
+
+  const removeFromPlan = (name) => {
+    saveWorkoutPlan(planGroup, planExercises.filter((e) => e !== name));
+  };
+
+  // Histórico
+  const dates = [...new Set((state.workoutLogs || []).map((w) => w.date))].sort().reverse();
+  const activeHistDate = histWrkDate || dates[0] || "";
+
+  const hasSets = sessionExs.some((e) => e.sets.length > 0);
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ background: `linear-gradient(135deg, ${s.color}18, rgba(255,255,255,0.02))`, border: `1px solid ${s.color}30`, borderRadius: "20px", padding: "18px 20px", marginBottom: "14px" }}>
+        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)", marginBottom: "3px" }}>
+          {sessionDate === today() ? "Treino de Hoje" : `Treino de ${fmtDate(sessionDate)}`}
+        </div>
+        <div className="syne" style={{ fontSize: "22px", fontWeight: "800", color: s.color }}>{s.type}</div>
+        <div className="small" style={{ marginTop: "3px" }}>
+          {activeGroup ? `${ALL_GROUPS.includes(activeGroup) ? activeGroup : activeGroup} · ${sessionExs.length} exercícios` : "Selecione um grupo abaixo"}
+        </div>
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="sub-tabs" style={{ marginBottom: "14px" }}>
+        {[{ id: "session", label: "Sessão" }, { id: "plan", label: "Plano" }, { id: "history", label: "Histórico" }].map((t) => (
+          <button key={t.id} className={`sub-tab ${activeSubTab === t.id ? "active" : ""}`} onClick={() => setActiveSubTab(t.id)}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* ─────────── SESSÃO ─────────── */}
+      {activeSubTab === "session" && (
+        <div>
+          {/* Date + group */}
+          <div style={{ display: "flex", gap: "8px", marginBottom: "12px", minWidth: 0 }}>
+            <input type="date" value={sessionDate} max={today()} onChange={(e) => { setSessionDate(e.target.value || today()); setSessionStarted(false); }}
+              style={{ fontWeight: "600", fontSize: "13px", minWidth: 0, flex: 1, width: "100%" }} />
+            {sessionDate !== today() && (
+              <button className="btn btn-ghost" style={{ padding: "10px 12px", fontSize: "12px", flexShrink: 0, whiteSpace: "nowrap" }} onClick={() => { setSessionDate(today()); setSessionStarted(false); }}>Hoje</button>
+            )}
+          </div>
+
+          {/* Group selector — planos dinâmicos */}
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "14px" }}>
+            {ALL_GROUPS.map((g) => (
+              <button key={g} onClick={() => { if (!sessionStarted) { setSelectedGroup(selectedGroup === g ? null : g); } else { setSelectedGroup(g); } }}
+                style={{ padding: "7px 14px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif", transition: "all 0.18s",
+                  background: activeGroup === g ? "#f97316" : "rgba(255,255,255,0.07)", color: activeGroup === g ? "#fff" : "rgba(255,255,255,0.5)" }}>
+                {g}
+              </button>
+            ))}
+          </div>
+
+          {/* Adicionar Exercício à Sessão */}
+          {activeGroup && (
+            <div style={{ marginBottom: "14px" }}>
+              {!showAddEx ? (
+                <button
+                  className="btn btn-ghost"
+                  style={{ width: "100%", padding: "10px", fontSize: "12px", border: "1px dashed rgba(255,255,255,0.15)", color: "#f97316", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
+                  onClick={() => setShowAddEx(true)}
+                >
+                  <Plus size={14} /> Adicionar Exercício
+                </button>
+              ) : (
+                <div className="card" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "12px", padding: "12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <span style={{ fontWeight: "700", fontSize: "12px", color: "#f97316" }}>Selecionar Exercício</span>
+                    <button style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer" }} onClick={() => setShowAddEx(false)}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div style={{ position: "relative", marginBottom: "10px" }}>
+                    <Search size={14} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)" }} />
+                    <input
+                      type="text"
+                      placeholder="Buscar exercício..."
+                      value={exSearch}
+                      onChange={(e) => setExSearch(e.target.value)}
+                      style={{ paddingLeft: "32px", fontSize: "12px" }}
+                    />
+                  </div>
+                  <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+                    {getExercises(activeGroup)
+                      .filter(name => !exSearch || name.toLowerCase().includes(exSearch.toLowerCase()))
+                      .map(name => {
+                        const inSession = sessionExs.some(e => e.name === name);
+                        return (
+                          <div
+                            key={name}
+                            onClick={() => !inSession && handleAddExToSession(name)}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              padding: "8px 10px",
+                              borderRadius: "8px",
+                              cursor: inSession ? "default" : "pointer",
+                              marginBottom: "2px",
+                              background: inSession ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)",
+                              opacity: inSession ? 0.6 : 1
+                            }}
+                          >
+                            <span style={{ fontSize: "12px" }}>{name}</span>
+                            {inSession ? <CheckCircle2 size={12} style={{ color: "#10b981" }} /> : <Plus size={12} style={{ color: "#f97316" }} />}
+                          </div>
+                        );
+                      })}
+                  </div>
+                  {exSearch && !getExercises(activeGroup).some(name => name.toLowerCase() === exSearch.trim().toLowerCase()) && (
+                    <button
+                      className="btn btn-ghost"
+                      style={{ width: "100%", padding: "8px", fontSize: "12px", border: "1px dashed rgba(249,115,22,0.3)", color: "#f97316", marginTop: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
+                      onClick={() => {
+                        const newName = exSearch.trim();
+                        if (saveCustomExercise) {
+                          saveCustomExercise(activeGroup, newName, "Outros");
+                        }
+                        handleAddExToSession(newName);
+                      }}
+                    >
+                      <Plus size={12} /> {`Criar e adicionar "${exSearch.trim()}"`}
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-primary"
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      fontSize: "12px",
+                      marginTop: "10px",
+                      background: "#f97316",
+                      color: "#fff",
+                      fontWeight: "bold",
+                      borderRadius: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "4px",
+                      cursor: "pointer",
+                      border: "none"
+                    }}
+                    onClick={() => setShowAddEx(false)}
+                  >
+                    Concluir
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Exercise cards — agrupados por músculo */}
+          {(() => {
+            // Card compacto por padrão — toca para expandir e adicionar série
+            const renderExCard = (ex, exIdx) => {
+              const isOpen = expandedEx === exIdx;
+              const prev = getPrevPerf(ex.name);
+              
+              // Calcular volume total da sessão atual para o exercício
+              const totalVolume = ex.sets
+                .filter(s => s.type === "valida" || s.type === "pap")
+                .reduce((acc, s) => acc + (s.weight * s.reps), 0);
+
+              // Resumo por tipo de série
+              const setsByType = SET_TYPES.map((t) => {
+                const ofType = ex.sets.filter((x) => x.type === t.id);
+                const vol = ofType.reduce((a, x) => a + x.weight * x.reps, 0);
+                return { ...t, count: ofType.length, vol };
+              }).filter((t) => t.count > 0);
+
+              const isDragged = draggedExIdx === exIdx;
+              return (
+                <div key={exIdx} 
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggedExIdx === null || draggedExIdx === exIdx) return;
+                    const updated = [...sessionExs];
+                    const [draggedItem] = updated.splice(draggedExIdx, 1);
+                    updated.splice(exIdx, 0, draggedItem);
+                    setSessionExs(updated);
+                    setDraggedExIdx(null);
+                  }}
+                  style={{ 
+                    background: isOpen ? "linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%)" : "rgba(255, 255, 255, 0.02)", 
+                    border: `1px solid ${isOpen ? "rgba(249, 115, 22, 0.4)" : "rgba(255, 255, 255, 0.06)"}`, 
+                    borderRadius: "16px", 
+                    overflow: "hidden", 
+                    marginBottom: "10px", 
+                    transition: "all 0.2s ease-in-out",
+                    boxShadow: isOpen ? "0 8px 30px rgba(0, 0, 0, 0.35), 0 0 15px rgba(249, 115, 22, 0.06)" : "none",
+                    opacity: isDragged ? 0.35 : 1,
+                  }}
+                >
+
+                  {/* Cabeçalho — toca para abrir/fechar */}
+                  <div onClick={() => setExpandedEx(isOpen ? null : exIdx)}
+                    style={{ padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
+                      <div 
+                        draggable={true}
+                        onDragStart={(e) => {
+                          setDraggedExIdx(exIdx);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragEnd={() => {
+                          setDraggedExIdx(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()} // Prevent expand/collapse when dragging
+                        style={{ cursor: "grab", display: "flex", alignItems: "center", padding: "4px 2px" }}
+                      >
+                        <GripVertical size={16} style={{ color: "rgba(255,255,255,0.2)" }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{ fontWeight:"700",fontSize:"14px",color:isOpen?"#f97316":"#fff",transition:"color 0.2s",cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:"3px",textDecorationColor:"rgba(249,115,22,0.35)" }}
+                          onClick={e=>{e.stopPropagation();openGuideModal&&openGuideModal(ex.name);}}
+                          title="Ver como executar"
+                        >{ex.name}</div>
+                      {ex.sets.length > 0 ? (
+                        <div style={{ fontSize: "11px", marginTop: "3px", color: "rgba(255,255,255,0.4)", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ color: "#f97316", fontWeight: "700" }}>{ex.sets.length} {ex.sets.length === 1 ? 'série' : 'séries'}</span>
+                          <span>•</span>
+                          <span>Volume: <strong>{totalVolume} kg</strong></span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "11px", marginTop: "3px", color: "rgba(255,255,255,0.3)" }}>
+                          {prev ? `Melhor Anterior: ${prev.lastWeight}kg × ${prev.lastReps} (Vol: ${prev.vol}kg)` : "Nenhuma série registrada hoje"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                    <div className="row" style={{ gap: "6px", background: "rgba(255,255,255,0.03)", borderRadius: "20px", padding: "3px 6px" }} onClick={(e) => e.stopPropagation()}>
+                      <button className="btn btn-ghost" style={{ width: "26px", height: "26px", padding: "0", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => openHistoryModal && openHistoryModal(ex.name)} title="Histórico"><History size={12} /></button>
+                      <button className="btn-danger" style={{ width: "26px", height: "26px", padding: "0", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => handleRemoveEx(exIdx)} title="Remover"><X size={11} /></button>
+                    </div>
+                  </div>
+
+                  {/* Séries já registradas — Grid Layout */}
+                  {ex.sets.length > 0 && (
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.5fr 1.5fr 1.5fr 0.5fr", gap: "8px", padding: "6px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "9px", fontWeight: "800", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        <span>Série</span>
+                        <span style={{ textAlign: "center" }}>Tipo</span>
+                        <span style={{ textAlign: "right" }}>Carga</span>
+                        <span style={{ textAlign: "right" }}>Reps</span>
+                        <span></span>
+                      </div>
+                      <div style={{ maxHeight: "250px", overflowY: "auto" }}>
+                        {ex.sets.map((set, sIdx) => {
+                          const ts = SET_TYPES.find((x) => x.id === set.type) || SET_TYPES[1];
+                          return (
+                            <div key={sIdx} style={{ 
+                              display: "grid", 
+                              gridTemplateColumns: "1.2fr 1.5fr 1.5fr 1.5fr 0.5fr", 
+                              gap: "8px", 
+                              alignItems: "center", 
+                              padding: "8px 16px", 
+                              borderBottom: "1px solid rgba(255,255,255,0.03)", 
+                              background: sIdx % 2 === 0 ? "rgba(255,255,255,0.005)" : "transparent" 
+                            }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{ display: "inline-flex", width: "18px", height: "18px", borderRadius: "50%", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.8)", fontSize: "10px", fontWeight: "800", alignItems: "center", justifyContent: "center" }}>{sIdx + 1}</span>
+                              </div>
+                              <span style={{ textTransform: "uppercase", fontSize: "8px", fontWeight: "900", color: ts.color, background: ts.color + "15", padding: "2px 6px", borderRadius: "4px", textAlign: "center", width: "fit-content", justifySelf: "center" }}>{ts.label}</span>
+                              <span style={{ fontSize: "12px", fontWeight: "700", color: "#fff", textAlign: "right" }}>{set.weight}<span style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", fontWeight: "500", marginLeft: "1px" }}>kg</span></span>
+                              <span style={{ fontSize: "12px", fontWeight: "700", color: "#fff", textAlign: "right" }}>{set.reps}<span style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", fontWeight: "500", marginLeft: "1px" }}>reps</span></span>
+                              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                                <button style={{ background: "none", border: "none", color: "rgba(239,68,68,0.5)", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center" }} onClick={() => handleRemoveSet(exIdx, sIdx)}><X size={11} /></button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Formulário expansível inline */}
+                  {isOpen && (
+                    <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.015)" }}>
+                      {/* Tipo de série */}
+                      <div style={{ display: "flex", gap: "4px", marginBottom: "10px" }}>
+                        {SET_TYPES.map((t) => (
+                          <button key={t.id} onClick={() => setSerieType(t.id)}
+                            style={{ 
+                              flex: 1, 
+                              padding: "6px 2px", 
+                              borderRadius: "6px", 
+                              border: "none", 
+                              cursor: "pointer", 
+                              fontSize: "9px", 
+                              fontWeight: "700", 
+                              fontFamily: "'DM Sans',sans-serif",
+                              background: serieType === t.id ? t.color : "rgba(255,255,255,0.04)", 
+                              color: serieType === t.id ? "#fff" : "rgba(255,255,255,0.4)", 
+                              display: "flex", 
+                              alignItems: "center", 
+                              justifyContent: "center", 
+                              gap: "2px",
+                              transition: "all 0.15s" 
+                            }}>
+                            {setTypeIcon(t.id, 10)} {t.label}
+                          </button>
+                        ))}
+                      </div>
+                      {/* Peso × Reps + botão confirmar */}
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <div style={{ flex: 1, position: "relative" }}>
+                          <input type="number" placeholder="Carga" value={serieWeight} onChange={(e) => setSerieWeight(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && document.getElementById(`reps-${exIdx}`)?.focus()}
+                            style={{ width: "100%", padding: "10px", paddingRight: "30px", fontSize: "13px", fontWeight: "700", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", color: "#fff", textAlign: "center" }} />
+                          <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", fontSize: "9px", color: "rgba(255,255,255,0.3)", fontWeight: "700" }}>kg</span>
+                        </div>
+                        <span style={{ color: "rgba(255,255,255,0.2)", fontWeight: "700", fontSize: "14px" }}>×</span>
+                        <div style={{ flex: 1, position: "relative" }}>
+                          <input id={`reps-${exIdx}`} type="number" placeholder="Reps" value={serieReps} onChange={(e) => setSerieReps(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleAddSet(exIdx)}
+                            style={{ width: "100%", padding: "10px", paddingRight: "38px", fontSize: "13px", fontWeight: "700", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", color: "#fff", textAlign: "center" }} />
+                          <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", fontSize: "9px", color: "rgba(255,255,255,0.3)", fontWeight: "700" }}>reps</span>
+                        </div>
+                        <button onClick={() => handleAddSet(exIdx)}
+                          style={{ 
+                            flexShrink: 0, 
+                            width: "42px", 
+                            height: "42px", 
+                            borderRadius: "10px", 
+                            border: "none", 
+                            cursor: "pointer", 
+                            background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)", 
+                            color: "#fff", 
+                            display: "flex", 
+                            alignItems: "center", 
+                            justifyContent: "center",
+                            boxShadow: "0 4px 12px rgba(249, 115, 22, 0.25)"
+                          }}>
+                          <Plus size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            };
+
+            if (sessionExs.length === 0) return null;
+
+            // Monta grupos musculares na ordem
+            const muscleOrder = Object.keys(MUSCLE_SUBGROUPS[activeGroup] || {});
+            // Exercícios que não pertencem a nenhum músculo → "Outros"
+            const allRendered = new Set();
+
+            return (
+              <>
+                {muscleOrder.map((muscle) => {
+                  const inGroup = sessionExs.filter((ex) => getMuscle(activeGroup, ex.name, customMuscleMap) === muscle);
+                  if (!inGroup.length) return null;
+                  return (
+                    <div key={muscle} style={{ marginBottom: "14px" }}>
+                      {/* Header do músculo */}
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", marginTop: "12px" }}>
+                        <div style={{ width: "3px", height: "12px", background: "#f97316", borderRadius: "2px" }} />
+                        <span style={{ fontSize: "11px", fontWeight: "800", color: "#f97316", textTransform: "uppercase", letterSpacing: "0.8px" }}>{muscle}</span>
+                      </div>
+                      {inGroup.map((ex) => {
+                        const exIdx = sessionExs.indexOf(ex);
+                        allRendered.add(exIdx);
+                        return renderExCard(ex, exIdx);
+                      })}
+                    </div>
+                  );
+                })}
+                {/* Outros (exercícios customizados não mapeados) */}
+                {sessionExs.some((ex, i) => !allRendered.has(i)) && (
+                  <div style={{ marginBottom: "14px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", marginTop: "12px" }}>
+                      <div style={{ width: "3px", height: "12px", background: "rgba(255,255,255,0.3)", borderRadius: "2px" }} />
+                      <span style={{ fontSize: "11px", fontWeight: "800", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.8px" }}>Outros</span>
+                    </div>
+                    {sessionExs.map((ex, exIdx) => !allRendered.has(exIdx) ? renderExCard(ex, exIdx) : null)}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          {/* Cardio & Gasto Calórico */}
+          {activeGroup && (
+            <div className="card" style={{ marginTop: "14px" }}>
+              <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px", color: "#f97316" }}>
+                <Flame size={16} /> Cardio & Gasto Calórico
+              </div>
+
+              {/* Musculação Info */}
+              {hasSets && (
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "14px" }}>
+                  <div style={{ flex: 1 }}>
+                    <div className="label" style={{ marginBottom: "4px" }}>Duração Musculação (min)</div>
+                    <input
+                      type="number"
+                      value={displayDuration}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setWeightDuration(val);
+                        setWeightKcal(estimateWeightKcal(val).toString());
+                        setSessionStarted(true);
+                      }}
+                      placeholder="60"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="label" style={{ marginBottom: "4px" }}>Est. Calorias Gastas (kcal)</div>
+                    <input
+                      type="number"
+                      value={displayKcal}
+                      onChange={(e) => {
+                        setWeightKcal(e.target.value);
+                        setSessionStarted(true);
+                      }}
+                      placeholder="360"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Cardios logged list */}
+              {cardios.length > 0 && (
+                <div style={{ marginBottom: "12px" }}>
+                  <div className="label" style={{ marginBottom: "6px" }}>Cardios Adicionados:</div>
+                  {cardios.map((c, idx) => (
+                    <div key={idx} className="row-sb" style={{ background: "rgba(255,255,255,0.02)", padding: "8px 12px", borderRadius: "10px", marginBottom: "6px", fontSize: "12px" }}>
+                      <span>
+                        🏃 **{c.type}** · {c.duration} min {c.distance ? `· ${c.distance} km` : ""} · ~{c.kcal} kcal
+                      </span>
+                      <button
+                        style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer" }}
+                        onClick={() => setCardios(prev => prev.filter((_, ci) => ci !== idx))}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Inline Cardio Form */}
+              {showCardioForm ? (
+                <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "12px", padding: "12px", marginBottom: "12px" }}>
+                  <div style={{ fontWeight: "700", fontSize: "12px", marginBottom: "10px", color: "#10b981" }}>Adicionar Cardio</div>
+                  
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+                    <div style={{ flex: 1 }}>
+                      <div className="label" style={{ marginBottom: "3px" }}>Tipo</div>
+                      <select
+                        value={cardioType}
+                        onChange={(e) => {
+                          setCardioType(e.target.value);
+                          const est = estimateCardioKcal(e.target.value, cardioDuration);
+                          setCardioKcalOverride(est ? est.toString() : "");
+                        }}
+                        style={{ padding: "8px", fontSize: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", borderRadius: "8px", width: "100%" }}
+                      >
+                        {["Corrida", "Caminhada", "Bicicleta", "Elíptico", "Outro"].map(t => (
+                          <option key={t} value={t} style={{ background: "#0a0a0f" }}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div className="label" style={{ marginBottom: "3px" }}>Duração (min)</div>
+                      <input
+                        type="number"
+                        placeholder="min"
+                        value={cardioDuration}
+                        onChange={(e) => {
+                          setCardioDuration(e.target.value);
+                          const est = estimateCardioKcal(cardioType, e.target.value);
+                          setCardioKcalOverride(est ? est.toString() : "");
+                        }}
+                        style={{ padding: "8px", fontSize: "12px" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+                    <div style={{ flex: 1 }}>
+                      <div className="label" style={{ marginBottom: "3px" }}>Distância (km - opcional)</div>
+                      <input
+                        type="number"
+                        placeholder="km"
+                        value={cardioDistance}
+                        onChange={(e) => setCardioDistance(e.target.value)}
+                        style={{ padding: "8px", fontSize: "12px" }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div className="label" style={{ marginBottom: "3px" }}>Calorias (kcal)</div>
+                      <input
+                        type="number"
+                        placeholder="kcal"
+                        value={cardioKcalOverride}
+                        onChange={(e) => setCardioKcalOverride(e.target.value)}
+                        style={{ padding: "8px", fontSize: "12px" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ flex: 1, padding: "8px" }}
+                      onClick={() => {
+                        setShowCardioForm(false);
+                        setCardioDuration("");
+                        setCardioDistance("");
+                        setCardioKcalOverride("");
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      style={{ flex: 1, padding: "8px", background: "#10b981" }}
+                      onClick={() => {
+                        const dur = parseInt(cardioDuration);
+                        if (isNaN(dur) || dur <= 0) return;
+                        
+                        const defaultEst = estimateCardioKcal(cardioType, cardioDuration);
+                        const kcalVal = parseInt(cardioKcalOverride) || defaultEst;
+                        
+                        setCardios(prev => [...prev, {
+                          type: cardioType,
+                          duration: dur,
+                          distance: parseFloat(cardioDistance) || 0,
+                          kcal: kcalVal
+                        }]);
+
+                        setSessionStarted(true);
+                        setShowCardioForm(false);
+                        setCardioDuration("");
+                        setCardioDistance("");
+                        setCardioKcalOverride("");
+                      }}
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="btn btn-ghost"
+                  style={{ width: "100%", padding: "10px", fontSize: "12px", border: "1px dashed rgba(255,255,255,0.1)", color: "#10b981", marginBottom: "14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
+                  onClick={() => setShowCardioForm(true)}
+                >
+                  <Plus size={14} /> Adicionar Cardio
+                </button>
+              )}
+
+              {/* Resumo Gasto Calórico Total */}
+              {(() => {
+                const totalBurn = (hasSets ? parseInt(displayKcal) || 0 : 0) + cardios.reduce((acc, c) => acc + c.kcal, 0);
+                if (totalBurn > 0) {
+                  return (
+                    <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", fontWeight: "600", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "10px", display: "flex", justifyContent: "space-between" }}>
+                      <span>Gasto calórico total estimado:</span>
+                      <span style={{ color: "#ef4444", fontWeight: "700" }}>🔥 {totalBurn} kcal</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          )}
+
+          {/* Salvar treino */}
+          {(hasSets || cardios.length > 0) && (
+            <div className="card">
+              <textarea
+                placeholder="Observações do treino..."
+                value={sessionNotes}
+                onChange={(e) => {
+                  setSessionNotes(e.target.value);
+                  setSessionStarted(true);
+                }}
+                style={{ height: "56px", marginBottom: "10px" }}
+              />
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  className="btn btn-ghost"
+                  style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "#f87171", borderColor: "rgba(239, 68, 68, 0.3)" }}
+                  onClick={resetSession}
+                >
+                  Limpar
+                </button>
+                <button
+                  className="btn btn-primary"
+                  style={{ flex: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                  onClick={handleSaveWorkout}
+                >
+                  <Save size={15} /> Salvar Treino
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Saved workouts for selected date */}
+          {(() => {
+            const saved = (state?.workoutLogs || []).filter((w) => w.date === sessionDate);
+            if (!saved.length) return null;
+            return (
+              <div className="card" style={{ marginTop: "12px" }}>
+                <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <CheckCircle2 size={13} style={{ color: "#10b981" }} />
+                  {sessionDate === today() ? "Treinos salvos hoje" : `Treinos em ${fmtDate(sessionDate)}`}
+                </div>
+                {saved.map((w) => (
+                  <div className="workout-item" key={w.id}>
+                    <div className="row-sb" style={{ marginBottom: "10px" }}>
+                      <span style={{ fontWeight: "700" }}>{w.type}</span>
+                      <div className="row" style={{ gap: "8px" }}>
+                        <span className="small">Vol total: {w.volume}kg</span>
+                        {(() => {
+                          const totalKcal = (w.exercises || []).reduce((acc, ex) => {
+                            if (ex.isCardio || ex.isMetadata) {
+                              return acc + (ex.kcal || 0);
+                            }
+                            return acc;
+                          }, 0);
+                          if (totalKcal > 0) {
+                            return <span className="small" style={{ color: "#ef4444", fontWeight: "700" }}>🔥 {totalKcal} kcal</span>;
+                          }
+                          return null;
+                        })()}
+                        <button className="btn-danger" onClick={() => removeWorkoutLog(w.id)} style={{ padding: "3px 7px", display: "flex", alignItems: "center" }}><X size={11} /></button>
+                      </div>
+                    </div>
+                    {(w.exercises || []).map((ex, ei) => {
+                      if (ex.isMetadata) {
+                        return (
+                          <div key={ei} style={{ marginBottom: "10px", fontSize: "12px", background: "rgba(255,255,255,0.02)", padding: "8px 12px", borderRadius: "10px" }}>
+                            <div style={{ fontWeight: "700", color: "#f97316" }}>Musculação</div>
+                            <div style={{ color: "rgba(255,255,255,0.6)", marginTop: "2px" }}>
+                              Duração: {ex.duration} min · Gasto: ~{ex.kcal} kcal
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (ex.isCardio) {
+                        return (
+                          <div key={ei} style={{ marginBottom: "10px", fontSize: "12px", background: "rgba(255,255,255,0.02)", padding: "8px 12px", borderRadius: "10px" }}>
+                            <div style={{ fontWeight: "700", color: "#10b981" }}>Cardio ({ex.cardioType})</div>
+                            <div style={{ color: "rgba(255,255,255,0.6)", marginTop: "2px" }}>
+                              Duração: {ex.duration} min {ex.distance ? `· Distância: ${ex.distance} km` : ""} · Gasto: ~{ex.kcal} kcal
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={ei} style={{ marginBottom: "10px" }}>
+                          <div style={{ fontWeight: "600", fontSize: "13px", marginBottom: "5px" }}>{ex.name}</div>
+                          {ex.sets.map((set, si) => {
+                            const ts = SET_TYPES.find((x) => x.id === set.type) || SET_TYPES[1];
+                            return (
+                              <div key={si} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", padding: "3px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                                <span style={{ color: ts.color, display: "flex", alignItems: "center", gap: "3px", minWidth: "80px" }}>
+                                  {setTypeIcon(ts.id, 11)} {ts.label}
+                                </span>
+                                <span style={{ fontWeight: "600" }}>{set.weight}kg × {set.reps}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ─────────── PLANO ─────────── */}
+      {activeSubTab === "plan" && (
+        <div>
+          {/* Seletor de planos existentes */}
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
+            {ALL_GROUPS.map((g) => (
+              <button key={g} onClick={() => { setPlanGroup(g); setPlanSearch(""); setShowLibrary(false); }}
+                style={{ padding:"7px 14px", borderRadius:10, border:"none", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
+                  background: planGroup===g ? "#f97316" : "rgba(255,255,255,0.07)", color: planGroup===g ? "#fff" : "rgba(255,255,255,0.5)" }}>
+                {g}
+              </button>
+            ))}
+          </div>
+
+          {/* Criar novo plano */}
+          {showNewPlan ? (
+            <div className="card" style={{ padding:"12px 14px", marginBottom:10 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:"#f97316", marginBottom:10 }}>Novo plano de treino</div>
+              <input type="text" placeholder="Nome do plano (ex: Push A, Chest Day...)"
+                value={newPlanName} onChange={e=>setNewPlanName(e.target.value)}
+                style={{ marginBottom:10 }}/>
+              <div style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.4)", textTransform:"uppercase", letterSpacing:.7, marginBottom:6 }}>
+                Ou escolha um template
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
+                {[
+                  { category:"PPL Clássico",    items:["Push","Pull","Legs"] },
+                  { category:"Upper/Lower",      items:["Upper","Lower"] },
+                  { category:"Full Body",        items:["Full Body A","Full Body B"] },
+                  { category:"Torso/Limbs",      items:["Torso","Limbs"] },
+                  { category:"Ant./Post.",       items:["Anterior","Posterior"] },
+                  { category:"PPL x2 (6 dias)", items:["Push A","Pull A","Legs A","Push B","Pull B","Legs B"] },
+                  { category:"Por músculo",      items:["Peito","Costas","Pernas","Ombro","Braços"] },
+                ].map(tpl=>(
+                  <div key={tpl.category}>
+                    <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)", marginBottom:4 }}>{tpl.category}</div>
+                    <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                      {tpl.items.map(item=>(
+                        <button key={item} onClick={()=>{
+                          if (!workoutPlans[item]) saveWorkoutPlan(item,[]);
+                          setPlanGroup(item); setShowLibrary(false); setShowNewPlan(false); setNewPlanName("");
+                        }} style={{
+                          padding:"5px 10px", borderRadius:8, border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer",
+                          fontSize:11, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
+                          background:workoutPlans[item]?"rgba(16,185,129,0.12)":"rgba(255,255,255,0.05)",
+                          color:workoutPlans[item]?"#10b981":"rgba(255,255,255,0.7)",
+                        }}>
+                          {workoutPlans[item]?"✓ ":""}{item}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={()=>{setShowNewPlan(false);setNewPlanName("");}} className="btn btn-ghost" style={{ flex:1, fontSize:12, padding:9 }}>Cancelar</button>
+                {newPlanName.trim() && (
+                  <button onClick={()=>{
+                    saveWorkoutPlan(newPlanName.trim(),[]);
+                    setPlanGroup(newPlanName.trim()); setShowNewPlan(false); setNewPlanName("");
+                  }} className="btn btn-primary" style={{ flex:2, fontSize:12, padding:9 }}>Criar &quot;{newPlanName}&quot;</button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <button onClick={()=>setShowNewPlan(true)} style={{
+              width:"100%", marginBottom:12, padding:"9px 14px", borderRadius:12,
+              border:"1px dashed rgba(249,115,22,0.35)", background:"rgba(249,115,22,0.05)",
+              cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
+              color:"#f97316", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+            }}>
+              <Plus size={13}/> Novo plano / template
+            </button>
+          )}
+
+          {/* Exercícios do plano */}
+          <div className="card" style={{ padding: "14px 16px", marginBottom: "10px" }}>
+            <div style={{ fontSize: "13px", fontWeight: "700", marginBottom: "12px" }}>
+              Exercícios do treino {planGroup} ({planExercises.length})
+            </div>
+            {planExercises.length === 0 && (
+              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "16px 0" }}>Nenhum exercício no plano. Adicione da biblioteca abaixo.</div>
+            )}
+            {planExercises.map((name) => (
+              <div key={name} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0,cursor:"pointer" }}
+                  onClick={()=>openGuideModal&&openGuideModal(name)}>
+                  <div style={{ width:28,height:28,borderRadius:8,background:"rgba(249,115,22,0.1)",border:"1px solid rgba(249,115,22,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                    <BookOpen size={11} style={{color:"#f97316"}}/>
+                  </div>
+                  <span style={{ fontSize:"13px",fontWeight:"600",color:"#fff" }}>{name}</span>
+                </div>
+                <button className="btn-danger" style={{ padding:"4px 8px",display:"flex",alignItems:"center",flexShrink:0 }} onClick={()=>removeFromPlan(name)}><Trash2 size={12}/></button>
+              </div>
+            ))}
+          </div>
+
+          {/* IA montar plano */}
+          <button
+            onClick={()=>openAiPlanModal&&openAiPlanModal(planGroup)}
+            style={{
+              width:"100%",marginBottom:8,padding:"11px 16px",borderRadius:14,
+              border:"1px dashed rgba(249,115,22,0.4)",background:"rgba(249,115,22,0.06)",
+              cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
+              color:"#f97316",display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+            }}>
+            ✨ IA montar plano de {planGroup}
+          </button>
+
+          {/* Biblioteca para adicionar */}
+          <div className="card" style={{ padding: "0", overflow: "hidden" }}>
+            <button onClick={() => setShowLibrary((v) => !v)} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", color: "#f97316", fontSize: "13px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Plus size={15} /> Adicionar da biblioteca</span>
+              {showLibrary ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+            </button>
+            {showLibrary && (
+              <div style={{ padding: "0 16px 16px" }}>
+                <div style={{ position: "relative", marginBottom: "12px" }}>
+                  <Search size={14} style={{ position: "absolute", left: "11px", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.35)" }} />
+                  <input type="text" placeholder="Filtrar exercícios..." value={planSearch} onChange={(e) => setPlanSearch(e.target.value)} style={{ paddingLeft: "32px" }} />
+                </div>
+
+                {/* Biblioteca agrupada por músculo */}
+                <div style={{ maxHeight: "340px", overflowY: "auto" }}>
+                  {planSearch ? (
+                    // Busca flat quando há filtro
+                    filteredLib.map((name) => {
+                      const inPlan = planExercises.includes(name);
+                      return (
+                        <div key={name} onClick={() => !inPlan && addToPlan(name)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 10px", borderRadius: "10px", cursor: inPlan ? "default" : "pointer", marginBottom: "2px", background: inPlan ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)", opacity: inPlan ? 0.6 : 1 }}>
+                          <span style={{ fontSize: "13px" }}>{name}</span>
+                          {inPlan ? <CheckCircle2 size={13} style={{ color: "#10b981" }} /> : <Plus size={13} style={{ color: "#f97316" }} />}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    // Agrupado por músculo quando sem filtro
+                    <>
+                      {Object.entries(MUSCLE_SUBGROUPS[planGroup] || {}).map(([muscle, musclExs]) => {
+                        const available = allForGroup.filter((e) => getMuscle(planGroup, e, customMuscleMap) === muscle);
+                        if (!available.length) return null;
+                        return (
+                          <div key={muscle} style={{ marginBottom: "12px" }}>
+                            <div style={{ fontSize: "10px", fontWeight: "800", color: "#f97316", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: "6px", paddingLeft: "2px" }}>{muscle}</div>
+                            {available.map((name) => {
+                              const inPlan = planExercises.includes(name);
+                              return (
+                                <div key={name} onClick={() => !inPlan && addToPlan(name)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 10px", borderRadius: "10px", cursor: inPlan ? "default" : "pointer", marginBottom: "2px", background: inPlan ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)", opacity: inPlan ? 0.6 : 1 }}>
+                                  <span style={{ fontSize: "13px" }}>{name}</span>
+                                  {inPlan ? <CheckCircle2 size={13} style={{ color: "#10b981" }} /> : <Plus size={13} style={{ color: "#f97316" }} />}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                      {(() => {
+                        const outros = allForGroup.filter((e) => getMuscle(planGroup, e, customMuscleMap) === "Outros");
+                        if (!outros.length) return null;
+                        return (
+                          <div key="Outros" style={{ marginBottom: "12px" }}>
+                            <div style={{ fontSize: "10px", fontWeight: "800", color: "#f97316", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: "6px", paddingLeft: "2px" }}>Outros</div>
+                            {outros.map((name) => {
+                              const inPlan = planExercises.includes(name);
+                              return (
+                                <div key={name} onClick={() => !inPlan && addToPlan(name)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 10px", borderRadius: "10px", cursor: inPlan ? "default" : "pointer", marginBottom: "2px", background: inPlan ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)", opacity: inPlan ? 0.6 : 1 }}>
+                                  <span style={{ fontSize: "13px" }}>{name}</span>
+                                  {inPlan ? <CheckCircle2 size={13} style={{ color: "#10b981" }} /> : <Plus size={13} style={{ color: "#f97316" }} />}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
+
+                {/* Criar exercício novo */}
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: "12px", paddingTop: "12px" }}>
+                  <div className="label" style={{ marginBottom: "8px" }}>Criar exercício novo</div>
+                  <input
+                    type="text"
+                    placeholder="Nome do exercício..."
+                    value={newExName}
+                    onChange={(e) => setNewExName(e.target.value)}
+                    style={{ marginBottom: "10px" }}
+                  />
+
+                  <div className="label" style={{ marginBottom: "6px" }}>Grupamento</div>
+                  <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginBottom: "10px" }}>
+                    {ALL_GROUPS.map((g) => (
+                      <button key={g} onClick={() => { setNewExGroup(g); setNewExMuscle(null); }}
+                        style={{ padding: "6px 12px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif",
+                          background: newExGroup === g ? "#f97316" : "rgba(255,255,255,0.07)", color: newExGroup === g ? "#fff" : "rgba(255,255,255,0.5)" }}>
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Sub-músculo — aparece quando grupo é selecionado */}
+                  {newExGroup && (
+                    <>
+                      <div className="label" style={{ marginBottom: "6px" }}>Músculo</div>
+                      <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginBottom: "12px" }}>
+                        {Object.keys(MUSCLE_SUBGROUPS[newExGroup] || {}).map((m) => (
+                          <button key={m} onClick={() => setNewExMuscle(m)}
+                            style={{ padding: "6px 12px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif",
+                              background: newExMuscle === m ? "#3b82f6" : "rgba(255,255,255,0.07)", color: newExMuscle === m ? "#fff" : "rgba(255,255,255,0.5)" }}>
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  <button
+                    className="btn btn-primary"
+                    style={{ width: "100%", opacity: (!newExName.trim() || !newExGroup || !newExMuscle) ? 0.5 : 1 }}
+                    onClick={() => {
+                      const name = newExName.trim();
+                      if (!name || !newExGroup || !newExMuscle) return;
+                      if (saveCustomExercise) saveCustomExercise(newExGroup, name, newExMuscle);
+                      setNewExName("");
+                      setNewExGroup(null);
+                      setNewExMuscle(null);
+                    }}
+                  >
+                    + Criar exercício
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────────── HISTÓRICO ─────────── */}
+      {activeSubTab === "history" && (
+        <div>
+          <div style={{ marginBottom: "14px" }}>
+            <div className="label" style={{ marginBottom: "6px" }}>Selecionar data</div>
+            <select value={activeHistDate} onChange={(e) => setHistWrkDate(e.target.value)}>
+              <option value="">— Escolha uma data —</option>
+              {dates.map((d) => <option key={d} value={d}>{fmtDate(d)}</option>)}
+            </select>
+          </div>
+          {activeHistDate && (
+            <div>
+              {(state?.workoutLogs || []).filter((w) => w.date === activeHistDate).map((w) => (
+                <div className="card" key={w.id}>
+                  <div className="row-sb" style={{ marginBottom: "10px" }}>
+                    <span className="syne" style={{ fontWeight: "700", fontSize: "16px" }}>{w.type}</span>
+                    <div className="row" style={{ gap: "10px" }}>
+                      <span className="small">Vol: {w.volume}kg</span>
+                      {(() => {
+                        const totalKcal = (w.exercises || []).reduce((acc, ex) => {
+                          if (ex.isCardio || ex.isMetadata) {
+                            return acc + (ex.kcal || 0);
+                          }
+                          return acc;
+                        }, 0);
+                        if (totalKcal > 0) {
+                          return <span className="small" style={{ color: "#ef4444", fontWeight: "700" }}>🔥 {totalKcal} kcal</span>;
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </div>
+                  {(w.exercises || []).map((ex, eIdx) => {
+                    if (ex.isMetadata) {
+                      return (
+                        <div key={eIdx} style={{ background: "rgba(255,255,255,0.03)", padding: "10px 12px", borderRadius: "10px", marginBottom: "8px", fontSize: "12px" }}>
+                          <div style={{ fontWeight: "700", color: "#f97316" }}>Musculação</div>
+                          <div style={{ color: "rgba(255,255,255,0.6)", marginTop: "2px" }}>
+                            Duração: {ex.duration} min · Gasto: ~{ex.kcal} kcal
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (ex.isCardio) {
+                      return (
+                        <div key={eIdx} style={{ background: "rgba(255,255,255,0.03)", padding: "10px 12px", borderRadius: "10px", marginBottom: "8px", fontSize: "12px" }}>
+                          <div style={{ fontWeight: "700", color: "#10b981" }}>Cardio ({ex.cardioType})</div>
+                          <div style={{ color: "rgba(255,255,255,0.6)", marginTop: "2px" }}>
+                            Duração: {ex.duration} min {ex.distance ? `· Distância: ${ex.distance} km` : ""} · Gasto: ~{ex.kcal} kcal
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={eIdx} style={{ background: "rgba(255,255,255,0.02)", padding: "10px 12px", borderRadius: "10px", marginBottom: "8px" }}>
+                        <div style={{ fontWeight: "600", fontSize: "13px", marginBottom: "6px" }}>{ex.name}</div>
+                        {ex.sets.map((set, sIdx) => {
+                          const ts = SET_TYPES.find((x) => x.id === set.type) || SET_TYPES[1];
+                          return (
+                            <div key={sIdx} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", padding: "3px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                              <span style={{ color: ts.color, fontWeight: "600", minWidth: "80px", display: "flex", alignItems: "center", gap: "3px" }}>
+                                {setTypeIcon(ts.id, 10)} {ts.label}
+                              </span>
+                              <span style={{ fontWeight: "600" }}>{set.weight}kg × {set.reps}</span>
+                              <span style={{ color: "rgba(255,255,255,0.35)", marginLeft: "auto" }}>= {set.weight * set.reps}kg</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                  {w.notes && <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px", marginTop: "6px", fontStyle: "italic" }}>Obs: {w.notes}</div>}
+                </div>
+              ))}
+              {!(state?.workoutLogs || []).filter((w) => w.date === activeHistDate).length && (
+                <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "24px" }}>Sem treinos gravados nesta data.</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

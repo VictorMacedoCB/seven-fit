@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs ls)",
+      "mcp__Claude_in_Chrome__navigate"
+    ]
+  }
+}
