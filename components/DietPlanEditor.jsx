@@ -33,9 +33,11 @@ export default function DietPlanEditor({ mealPlan, saveMealPlan, targets, objeti
   // Carrega refeições do plano atual
   useEffect(() => {
     const plan = mealPlan?.[activeObj] || mealPlan?.normal || [];
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMeals(plan.map(m => ({ ...m, foods: m.foods?.map(f =>
       typeof f === "string" ? { name:f, qty:100, kcal:0, protein:0, carbs:0, fat:0 } : f
     ) || [] })));
+     
     setDirty(false);
   }, [activeObj, mealPlan]);
 
@@ -51,11 +53,15 @@ export default function DietPlanEditor({ mealPlan, saveMealPlan, targets, objeti
       setDirty(false);
     }, 800);
     return () => clearTimeout(timeout);
-  }, [meals, dirty]);
+  }, [meals, dirty, activeObj, mealPlan, saveMealPlan]);
 
   // Busca de alimentos — local + Open Food Facts
   useEffect(() => {
-    if (!searchQuery || searchQuery.length < 2) { setSearchResults([]); return; }
+    if (!searchQuery || searchQuery.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSearchResults([]);
+      return;
+    }
     const local = COMMON_FOODS.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 5);
     setSearchResults(local);
     // Busca remota (debounced)

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import exercisesDb from "../../../lib/exercises-ptbr.json";
+import { findBestExerciseMatch, normalizeExerciseName } from "../../../lib/exerciseMatch";
 
 // Mapeamento: nome usado no app → nome exato no exercises-ptbr.json
 const APP_TO_DB = {
@@ -56,6 +57,16 @@ const APP_TO_DB = {
   "Panturrilha em Pé":                "Elevação de Panturrilha com Halter",
   "Panturrilha Sentado":              "Elevação de Panturrilha Sentado com Barra",
   "Panturrilha no Leg Press":         "Press de Panturrilha na Máquina de Leg Press",
+
+  // Complementares (Abdômen, Panturrilha, Lombar)
+  "Prancha":                          "Prancha",
+  "Abdominal na Polia":               "Abdominal na Polia",
+  "Abdominal Infra":                  "Abdominal Infra na Polia",
+  "Elevação de Pernas":               "Elevação de Pernas na Barra",
+  "Roda Abdominal":                   "Roda Abdominal",
+  "Abdominal Bicicleta":              "Bicicleta no Ar",
+  "Abdominal Oblíquo":                "Abdominais Oblíquos",
+  "Hiperextensão Lombar":             "Hiperextensões (Extensões Lombares)",
 };
 
 // Rich local database of fallbacks for the core exercises to guarantee immediate, offline-compatible operation!
@@ -222,10 +233,7 @@ export async function GET(request) {
       return map[exName] || exName;
     };
     const searchName = getDbMatchName(matchedKey);
-    const normalizedSearch = normalize(searchName);
-    const dbMatch = exercisesDb.find(
-      (ex) => normalize(ex.name) === normalizedSearch || normalizedSearch.includes(normalize(ex.name)) || normalize(ex.name).includes(normalizedSearch)
-    );
+    const dbMatch = findBestExerciseMatch(searchName, exercisesDb);
     return NextResponse.json({
       success: true,
       guide: {
@@ -237,9 +245,8 @@ export async function GET(request) {
   }
 
   // 1.5. Try to search in the downloaded Pt-Br exercises database
-  const dbMatch = exercisesDb.find(
-    (ex) => normalize(ex.name) === normalizedQuery || normalizedQuery.includes(normalize(ex.name)) || normalize(ex.name).includes(normalizedQuery)
-  );
+  const mappedName = APP_TO_DB[name] || name;
+  const dbMatch = findBestExerciseMatch(mappedName, exercisesDb);
 
   if (dbMatch) {
     const translateMuscle = (m) => {

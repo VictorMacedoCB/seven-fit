@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Flame, CheckCircle2, BookOpen, History, X, Plus, Save, Zap, Droplets, Search, ChevronDown, ChevronUp, Trash2, GripVertical } from "lucide-react";
 import exercisesDb from "@/lib/exercises-ptbr.json";
+import RestTimer, { useRestTimerTrigger } from "@/components/RestTimer";
 
 // Sub-grupamentos musculares por tipo de treino
 const MUSCLE_SUBGROUPS = {
@@ -35,6 +36,16 @@ const MUSCLE_SUBGROUPS = {
     "Bíceps":  ["Rosca Direta","Rosca Martelo","Rosca Concentrada"],
     "Abdômen":    [],
   },
+  // Dia dedicado a cardio + grupos complementares (abdômen, panturrilha, lombar)
+  // — útil pra quem quer separar isso do dia principal de força.
+  Complementares: {
+    "Abdômen":     ["Prancha","Abdominal na Polia","Abdominal Infra","Elevação de Pernas","Roda Abdominal","Abdominal Bicicleta","Abdominal Oblíquo"],
+    "Panturrilha": ["Panturrilha em Pé","Panturrilha Sentado","Panturrilha no Leg Press"],
+    "Lombar":      ["Hiperextensão Lombar"],
+  },
+  Cardio: {
+    "Cardio": [],
+  },
 };
 
 // Retorna o sub-músculo de um exercício dentro de um grupo
@@ -61,6 +72,12 @@ function getMuscle(group, name, customMap = {}) {
       if (primary === 'abdominais') return 'Abdômen';
       const legsMuscles = ['quadriceps', 'isquiotibiais', 'gluteos', 'panturrilhas', 'adutores', 'abdutores'];
       if (legsMuscles.includes(primary)) return 'Pernas';
+    }
+
+    if (group === 'Complementares') {
+      if (primary === 'abdominais') return 'Abdômen';
+      if (primary === 'panturrilhas') return 'Panturrilha';
+      if (primary === 'inferior-das-costas') return 'Lombar';
     }
 
     if (primary === 'ombros') {
@@ -111,6 +128,7 @@ export default function WorkoutTab({
   saveCustomExercise,
   workoutPlans,
   saveWorkoutPlan,
+  deleteWorkoutPlan,
   DEFAULT_EXERCISES,
   customMuscleMap = {},
   saveCustomMuscleMap,
@@ -182,6 +200,10 @@ export default function WorkoutTab({
   const [serieReps, setSerieReps] = useState("");
   const [draggedExIdx, setDraggedExIdx] = useState(null);
 
+  // Cronômetro de descanso entre séries — dispara automaticamente ao registrar uma série
+  const [restTimerSignal, fireRestTimer] = useRestTimerTrigger();
+  const [restTimerExName, setRestTimerExName] = useState("");
+
   // Busca para adicionar exercício extra
   const [showAddEx, setShowAddEx] = useState(false);
   const [exSearch, setExSearch] = useState("");
@@ -192,7 +214,24 @@ export default function WorkoutTab({
   // Plano sub-tab
   const [showNewPlan, setShowNewPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState("");
-  const [planGroup, setPlanGroup] = useState("Push");
+  // Sincroniza o plano padrão da aba "Plano" com o treino programado para hoje
+  // (evita ficar preso em "Push" quando o usuário mudou a divisão nas Configurações, ex: Upper/Lower)
+  const [planGroup, setPlanGroup] = useState(() => {
+    try {
+      const dow = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"][new Date().getDay()];
+      const sched = state?.schedule || [];
+      const todaySched = sched.find((d) => d.day === dow);
+      if (todaySched?.group && workoutPlans && Object.prototype.hasOwnProperty.call(workoutPlans, todaySched.group)) {
+        return todaySched.group;
+      }
+    } catch (e) { /* noop */ }
+    const keys = workoutPlans ? Object.keys(workoutPlans) : [];
+    return keys[0] || "Push";
+  });
+
+  // Enquanto o usuário não trocar manualmente de plano nesta visita, mantém a aba
+  // "Plano" acompanhando o grupo ativo da agenda — ex: ao editar a Semana pra Upper/Lower.
+  const planGroupTouchedRef = React.useRef(false);
   const [planSearch, setPlanSearch] = useState("");
   const [showLibrary, setShowLibrary] = useState(false);
 
@@ -277,6 +316,16 @@ export default function WorkoutTab({
   const s = schedForDate(sessionDate);
   const activeGroup = selectedGroup || s.group;
 
+  // Mantém a aba "Plano" sincronizada com a divisão programada na Semana (Configurações),
+  // a menos que o usuário já tenha trocado manualmente de plano nesta sessão.
+  useEffect(() => {
+    if (planGroupTouchedRef.current) return;
+    if (activeGroup && workoutPlans && Object.prototype.hasOwnProperty.call(workoutPlans, activeGroup) && activeGroup !== planGroup) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPlanGroup(activeGroup);
+    }
+  }, [activeGroup, workoutPlans, planGroup]);
+
   // Derived values for default weight training session info
   const existingWorkout = (state.workoutLogs || []).find(w => w.date === sessionDate);
   const displayDuration = sessionStarted ? weightDuration : (existingWorkout ? "0" : "60");
@@ -324,7 +373,7 @@ export default function WorkoutTab({
     }
   }, [sessionStarted, sessionExs, sessionNotes, weightDuration, weightKcal, cardios, sessionDate, selectedGroup]);
 
-  // Performance anterior
+  // Performance anterior (melhor série "válida" do último treino com este exercício)
   const getPrevPerf = (exName) => {
     const logs = state.workoutLogs || [];
     const all = [];
@@ -340,23 +389,40 @@ export default function WorkoutTab({
     return { lastWeight: mx.weight, lastReps: mx.reps, vol };
   };
 
-  // Efeito para auto-preencher carga/reps ao expandir card ou adicionar exercício
+  // Última série registrada de fato (não a "melhor") — usada como placeholder nos campos
+  // de Carga/Reps, pra lembrar rapidamente o que foi feito no treino anterior desse exercício.
+  const getLastSetPerf = (exName) => {
+    const logs = state.workoutLogs || [];
+    const all = [];
+    logs.forEach((w) => w.exercises.forEach((ex) => {
+      if (ex.name === exName && ex.sets && ex.sets.length) all.push({ date: w.date, sets: ex.sets });
+    }));
+    if (!all.length) return null;
+    const last = all[all.length - 1];
+    const validSets = last.sets.filter((x) => x.type === "valida");
+    const lastSet = (validSets.length ? validSets : last.sets)[(validSets.length ? validSets : last.sets).length - 1];
+    if (!lastSet) return null;
+    return { weight: lastSet.weight, reps: lastSet.reps, date: last.date };
+  };
+
+  // Efeito para auto-preencher carga/reps ao expandir card (apenas com séries já feitas HOJE).
+  // Quando não há série feita hoje ainda, deixamos os campos vazios e mostramos o desempenho
+  // do treino anterior como *placeholder* (texto fantasma), não como valor pré-preenchido —
+  // assim o usuário sempre confirma explicitamente a carga/reps que está fazendo agora.
   useEffect(() => {
     if (expandedEx !== null && expandedEx !== undefined && sessionExs[expandedEx]) {
       const ex = sessionExs[expandedEx];
       if (ex.sets && ex.sets.length > 0) {
         const lastSet = ex.sets[ex.sets.length - 1];
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSerieWeight(String(lastSet.weight));
+         
         setSerieReps(String(lastSet.reps));
       } else {
-        const prev = getPrevPerf(ex.name);
-        if (prev) {
-          setSerieWeight(String(prev.lastWeight));
-          setSerieReps(String(prev.lastReps));
-        } else {
-          setSerieWeight("");
-          setSerieReps("");
-        }
+         
+        setSerieWeight("");
+         
+        setSerieReps("");
       }
     }
   }, [expandedEx, sessionExs]);
@@ -372,6 +438,9 @@ export default function WorkoutTab({
         i === exIdx ? { ...ex, sets: [...ex.sets, { type: serieType, weight: w, reps: r }] } : ex
       )
     );
+    // Dispara o cronômetro de descanso automaticamente após registrar a série
+    setRestTimerExName(sessionExs[exIdx]?.name || "");
+    fireRestTimer();
     // Não limpa mais os inputs para permitir adicionar séries idênticas rapidamente
   };
 
@@ -384,11 +453,20 @@ export default function WorkoutTab({
     );
   };
 
+  // Remove o exercício da sessão de hoje E do plano salvo do grupo, em uma única ação —
+  // sem isso, o exercício "removido" voltava a aparecer no próximo treino porque continuava
+  // salvo no plano (workoutPlans[activeGroup]).
   const handleRemoveEx = (exIdx) => {
+    const exName = sessionExs[exIdx]?.name;
     setSessionExs((prev) => prev.filter((_, i) => i !== exIdx));
     setSessionStarted(true);
     if (expandedEx === exIdx) setExpandedEx(null);
     else if (expandedEx > exIdx) setExpandedEx((p) => p - 1);
+
+    // Também remove do plano permanente do grupo ativo, se ele estiver lá
+    if (exName && activeGroup && workoutPlans && Array.isArray(workoutPlans[activeGroup]) && workoutPlans[activeGroup].includes(exName)) {
+      saveWorkoutPlan(activeGroup, workoutPlans[activeGroup].filter((n) => n !== exName));
+    }
   };
 
   const handleAddExToSession = (name) => {
@@ -516,11 +594,31 @@ export default function WorkoutTab({
           {/* Group selector — planos dinâmicos */}
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "14px" }}>
             {ALL_GROUPS.map((g) => (
-              <button key={g} onClick={() => { if (!sessionStarted) { setSelectedGroup(selectedGroup === g ? null : g); } else { setSelectedGroup(g); } }}
-                style={{ padding: "7px 14px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif", transition: "all 0.18s",
-                  background: activeGroup === g ? "#f97316" : "rgba(255,255,255,0.07)", color: activeGroup === g ? "#fff" : "rgba(255,255,255,0.5)" }}>
-                {g}
-              </button>
+              <div key={g} style={{ position: "relative", display: "inline-flex" }}>
+                <button onClick={() => { if (!sessionStarted) { setSelectedGroup(selectedGroup === g ? null : g); } else { setSelectedGroup(g); } }}
+                  style={{ padding: "7px 22px 7px 14px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif", transition: "all 0.18s",
+                    background: activeGroup === g ? "#f97316" : "rgba(255,255,255,0.07)", color: activeGroup === g ? "#fff" : "rgba(255,255,255,0.5)" }}>
+                  {g}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Excluir o plano "${g}" inteiro? Isso remove o treino e todos os exercícios salvos dele.`)) {
+                      if (selectedGroup === g) setSelectedGroup(null);
+                      if (planGroup === g) planGroupTouchedRef.current = false;
+                      deleteWorkoutPlan && deleteWorkoutPlan(g);
+                    }
+                  }}
+                  title={`Excluir plano "${g}"`}
+                  style={{
+                    position: "absolute", top: "-5px", right: "-5px", width: "16px", height: "16px",
+                    borderRadius: "50%", border: "1px solid rgba(0,0,0,0.3)", background: "#ef4444", color: "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0,
+                  }}
+                >
+                  <X size={9} strokeWidth={3} />
+                </button>
+              </div>
             ))}
           </div>
 
@@ -628,6 +726,7 @@ export default function WorkoutTab({
             const renderExCard = (ex, exIdx) => {
               const isOpen = expandedEx === exIdx;
               const prev = getPrevPerf(ex.name);
+              const lastSet = getLastSetPerf(ex.name);
               
               // Calcular volume total da sessão atual para o exercício
               const totalVolume = ex.sets
@@ -707,7 +806,7 @@ export default function WorkoutTab({
                   </div>
                     <div className="row" style={{ gap: "6px", background: "rgba(255,255,255,0.03)", borderRadius: "20px", padding: "3px 6px" }} onClick={(e) => e.stopPropagation()}>
                       <button className="btn btn-ghost" style={{ width: "26px", height: "26px", padding: "0", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => openHistoryModal && openHistoryModal(ex.name)} title="Histórico"><History size={12} /></button>
-                      <button className="btn-danger" style={{ width: "26px", height: "26px", padding: "0", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => handleRemoveEx(exIdx)} title="Remover"><X size={11} /></button>
+                      <button className="btn-danger" style={{ width: "26px", height: "26px", padding: "0", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => handleRemoveEx(exIdx)} title="Remover do treino de hoje e do plano"><X size={11} /></button>
                     </div>
                   </div>
 
@@ -753,6 +852,25 @@ export default function WorkoutTab({
                   {/* Formulário expansível inline */}
                   {isOpen && (
                     <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.015)" }}>
+                      {/* Chip com desempenho do treino anterior — toque pra copiar pros campos */}
+                      {lastSet && (
+                        <button
+                          onClick={() => { setSerieWeight(String(lastSet.weight)); setSerieReps(String(lastSet.reps)); }}
+                          style={{
+                            display: "flex", alignItems: "center", gap: "6px", width: "100%",
+                            marginBottom: "10px", padding: "7px 10px", borderRadius: "8px",
+                            border: "1px dashed rgba(249,115,22,0.3)", background: "rgba(249,115,22,0.06)",
+                            cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                          }}
+                          title="Usar carga/reps do último treino"
+                        >
+                          <History size={11} style={{ color: "#f97316", flexShrink: 0 }} />
+                          <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.55)" }}>
+                            Último treino: <strong style={{ color: "#f97316" }}>{lastSet.weight}kg × {lastSet.reps}</strong>
+                          </span>
+                          <span style={{ marginLeft: "auto", fontSize: "10px", fontWeight: "700", color: "#f97316" }}>usar</span>
+                        </button>
+                      )}
                       {/* Tipo de série */}
                       <div style={{ display: "flex", gap: "4px", marginBottom: "10px" }}>
                         {SET_TYPES.map((t) => (
@@ -781,14 +899,14 @@ export default function WorkoutTab({
                       {/* Peso × Reps + botão confirmar */}
                       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                         <div style={{ flex: 1, position: "relative" }}>
-                          <input type="number" placeholder="Carga" value={serieWeight} onChange={(e) => setSerieWeight(e.target.value)}
+                          <input type="number" placeholder={lastSet ? `Últ: ${lastSet.weight}` : "Carga"} value={serieWeight} onChange={(e) => setSerieWeight(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && document.getElementById(`reps-${exIdx}`)?.focus()}
                             style={{ width: "100%", padding: "10px", paddingRight: "30px", fontSize: "13px", fontWeight: "700", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", color: "#fff", textAlign: "center" }} />
                           <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", fontSize: "9px", color: "rgba(255,255,255,0.3)", fontWeight: "700" }}>kg</span>
                         </div>
                         <span style={{ color: "rgba(255,255,255,0.2)", fontWeight: "700", fontSize: "14px" }}>×</span>
                         <div style={{ flex: 1, position: "relative" }}>
-                          <input id={`reps-${exIdx}`} type="number" placeholder="Reps" value={serieReps} onChange={(e) => setSerieReps(e.target.value)}
+                          <input id={`reps-${exIdx}`} type="number" placeholder={lastSet ? `Últ: ${lastSet.reps}` : "Reps"} value={serieReps} onChange={(e) => setSerieReps(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && handleAddSet(exIdx)}
                             style={{ width: "100%", padding: "10px", paddingRight: "38px", fontSize: "13px", fontWeight: "700", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", color: "#fff", textAlign: "center" }} />
                           <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", fontSize: "9px", color: "rgba(255,255,255,0.3)", fontWeight: "700" }}>reps</span>
@@ -858,8 +976,9 @@ export default function WorkoutTab({
             );
           })()}
 
-          {/* Cardio & Gasto Calórico */}
-          {activeGroup && (
+          {/* Cardio & Gasto Calórico — sempre visível, mesmo em dias sem grupo de treino de força
+              (ex: dia de Cardio puro, Complementares, ou Descanso Ativo) */}
+          {true && (
             <div className="card" style={{ marginTop: "14px" }}>
               <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px", color: "#f97316" }}>
                 <Flame size={16} /> Cardio & Gasto Calórico
@@ -1159,11 +1278,31 @@ export default function WorkoutTab({
           {/* Seletor de planos existentes */}
           <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
             {ALL_GROUPS.map((g) => (
-              <button key={g} onClick={() => { setPlanGroup(g); setPlanSearch(""); setShowLibrary(false); }}
-                style={{ padding:"7px 14px", borderRadius:10, border:"none", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
-                  background: planGroup===g ? "#f97316" : "rgba(255,255,255,0.07)", color: planGroup===g ? "#fff" : "rgba(255,255,255,0.5)" }}>
-                {g}
-              </button>
+              <div key={g} style={{ position: "relative", display: "inline-flex" }}>
+                <button onClick={() => { planGroupTouchedRef.current = true; setPlanGroup(g); setPlanSearch(""); setShowLibrary(false); }}
+                  style={{ padding:"7px 22px 7px 14px", borderRadius:10, border:"none", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
+                    background: planGroup===g ? "#f97316" : "rgba(255,255,255,0.07)", color: planGroup===g ? "#fff" : "rgba(255,255,255,0.5)" }}>
+                  {g}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Excluir o plano "${g}" inteiro? Isso remove o treino e todos os exercícios salvos dele.`)) {
+                      if (selectedGroup === g) setSelectedGroup(null);
+                      if (planGroup === g) planGroupTouchedRef.current = false;
+                      deleteWorkoutPlan && deleteWorkoutPlan(g);
+                    }
+                  }}
+                  title={`Excluir plano "${g}"`}
+                  style={{
+                    position: "absolute", top: "-5px", right: "-5px", width: "16px", height: "16px",
+                    borderRadius: "50%", border: "1px solid rgba(0,0,0,0.3)", background: "#ef4444", color: "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0,
+                  }}
+                >
+                  <X size={9} strokeWidth={3} />
+                </button>
+              </div>
             ))}
           </div>
 
@@ -1186,6 +1325,7 @@ export default function WorkoutTab({
                   { category:"Ant./Post.",       items:["Anterior","Posterior"] },
                   { category:"PPL x2 (6 dias)", items:["Push A","Pull A","Legs A","Push B","Pull B","Legs B"] },
                   { category:"Por músculo",      items:["Peito","Costas","Pernas","Ombro","Braços"] },
+                  { category:"Cardio & Complementares", items:["Cardio","Complementares"] },
                 ].map(tpl=>(
                   <div key={tpl.category}>
                     <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)", marginBottom:4 }}>{tpl.category}</div>
@@ -1193,7 +1333,7 @@ export default function WorkoutTab({
                       {tpl.items.map(item=>(
                         <button key={item} onClick={()=>{
                           if (!workoutPlans[item]) saveWorkoutPlan(item,[]);
-                          setPlanGroup(item); setShowLibrary(false); setShowNewPlan(false); setNewPlanName("");
+                          planGroupTouchedRef.current = true; setPlanGroup(item); setShowLibrary(false); setShowNewPlan(false); setNewPlanName("");
                         }} style={{
                           padding:"5px 10px", borderRadius:8, border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer",
                           fontSize:11, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
@@ -1212,7 +1352,7 @@ export default function WorkoutTab({
                 {newPlanName.trim() && (
                   <button onClick={()=>{
                     saveWorkoutPlan(newPlanName.trim(),[]);
-                    setPlanGroup(newPlanName.trim()); setShowNewPlan(false); setNewPlanName("");
+                    planGroupTouchedRef.current = true; setPlanGroup(newPlanName.trim()); setShowNewPlan(false); setNewPlanName("");
                   }} className="btn btn-primary" style={{ flex:2, fontSize:12, padding:9 }}>Criar &quot;{newPlanName}&quot;</button>
                 )}
               </div>
@@ -1471,6 +1611,7 @@ export default function WorkoutTab({
           )}
         </div>
       )}
+      <RestTimer autoStartSignal={restTimerSignal} exerciseName={restTimerExName} />
     </div>
   );
 }

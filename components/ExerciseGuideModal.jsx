@@ -21,7 +21,14 @@ export default function ExerciseGuideModal({ isOpen, onClose, exerciseName }) {
   const [page, setPage] = useState(0); // 0=imagem+músculos, 1=preparo, 2=execução, 3=erros
 
   useEffect(() => {
-    if (!isOpen || !exerciseName) { setGuide(null); setError(""); setPage(0); setFrame(0); return; }
+    if (!isOpen || !exerciseName) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGuide(null);
+      setError("");
+      setPage(0);
+      setFrame(0);
+      return;
+    }
     const cached = getCached(exerciseName);
     if (cached) { setGuide(cached); return; }
     setLoading(true);

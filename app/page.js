@@ -21,6 +21,7 @@ import EditDayModal from "@/components/EditDayModal";
 import HistoryModal from "@/components/HistoryModal";
 import ExerciseGuideModal from "@/components/ExerciseGuideModal";
 import exercisesDb from "@/lib/exercises-ptbr.json";
+import foodsPtbr from "@/lib/foods-ptbr.json";
 
 // ── SYSTEM CONSTANTS ─────────────────────────────────────────────────────────
 const DEFAULT_PROFILE = {
@@ -81,6 +82,13 @@ const DEFAULT_EXERCISES = {
     "Agachamento Livre", "Leg Press", "Cadeira Extensora", "Mesa Flexora", "Stiff",
     "Avanço", "Panturrilha em Pé", "Panturrilha Sentado",
     "Rosca Direta", "Rosca Martelo", "Rosca Concentrada"
+  ],
+  // COMPLEMENTARES — Abdômen + Panturrilha + Lombar (dia dedicado, separado do treino principal)
+  Complementares: [
+    "Prancha", "Abdominal na Polia", "Abdominal Infra", "Elevação de Pernas", "Roda Abdominal",
+    "Abdominal Bicicleta", "Abdominal Oblíquo",
+    "Panturrilha em Pé", "Panturrilha Sentado", "Panturrilha no Leg Press",
+    "Hiperextensão Lombar"
   ]
 };
 
@@ -113,6 +121,33 @@ const DEFAULT_FOODS = [
   { id: "f9", name: "Patinho / Coxão Mole", kcal: 158, protein: 28, carbs: 0, fat: 5, unit: "100g" },
   { id: "f10", name: "Azeite de Oliva", kcal: 884, protein: 0, carbs: 0, fat: 100, unit: "100ml" }
 ];
+
+// Base ampliada de alimentos brasileiros (TACO/UNICAMP) — anteriormente presente no repo
+// mas não conectada à busca de alimentos. Normalizamos os campos (per → unit) e mesclamos
+// com DEFAULT_FOODS, removendo duplicatas por nome.
+const TACO_FOODS = foodsPtbr.map((f) => ({
+  id: f.id,
+  name: f.name,
+  category: f.category,
+  kcal: f.kcal,
+  protein: f.protein,
+  carbs: f.carbs,
+  fat: f.fat,
+  unit: f.per,
+  source: f.source,
+}));
+const ALL_DEFAULT_FOODS = (() => {
+  const seenNames = new Set(DEFAULT_FOODS.map((f) => f.name.toLowerCase()));
+  const merged = [...DEFAULT_FOODS];
+  for (const f of TACO_FOODS) {
+    const key = f.name.toLowerCase();
+    if (!seenNames.has(key)) {
+      seenNames.add(key);
+      merged.push(f);
+    }
+  }
+  return merged;
+})();
 const COLORS = ["#f97316", "#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#6b7280", "#ef4444"];
 const SET_TYPES = [
   { id: "aquecimento", label: "Aquecimento", emoji: "🔥", color: "#f59e0b" },
@@ -414,7 +449,7 @@ export default function Home() {
     }
   };
 
-  const handleUserSignIn = async (currUser) => {
+  const handleUserSignIn = React.useCallback(async (currUser) => {
     setIsSyncing(true);
     setSyncError(null);
     try {
@@ -456,7 +491,14 @@ export default function Home() {
       setIsHydrated(true);
       setIsSyncing(false);
     }
-  };
+  }, []);
+
+  // Keep a ref to the latest handler so effects can call it without adding
+  // it to dependency arrays and triggering re-runs.
+  const handleUserSignInRef = React.useRef(handleUserSignIn);
+  useEffect(() => {
+    handleUserSignInRef.current = handleUserSignIn;
+  }, [handleUserSignIn]);
 
   useEffect(() => {
     // Always load from localStorage immediately so the app renders without waiting for network
@@ -470,7 +512,7 @@ export default function Home() {
         if (session) {
           setUser(session.user);
           setIsHydrated(true);
-          handleUserSignIn(session.user);
+          if (handleUserSignInRef.current) handleUserSignInRef.current(session.user);
         } else {
           setIsHydrated(true);
         }
@@ -481,7 +523,7 @@ export default function Home() {
         if (session) {
           setUser(session.user);
           setIsHydrated(true);
-          await handleUserSignIn(session.user);
+          if (handleUserSignInRef.current) await handleUserSignInRef.current(session.user);
         } else {
           setUser(null);
           const updatedLocal = loadLocalState();
@@ -633,7 +675,7 @@ export default function Home() {
   };
 
   const allFoods = () => {
-    return [...DEFAULT_FOODS, ...(state.customFoods || [])];
+    return [...ALL_DEFAULT_FOODS, ...(state.customFoods || [])];
   };
 
   const getExercises = (group) => {
@@ -1045,10 +1087,20 @@ export default function Home() {
   const saveDayEdit = async (dayIndex, updatedDayObj) => {
     const updatedSched = [...state.schedule];
     updatedSched[dayIndex] = updatedDayObj;
-    
+
+    // Se o dia foi vinculado a uma divisão (ex: "Upper", "Lower") que ainda não existe
+    // como plano de exercícios, cria automaticamente uma entrada vazia. Isso mantém a
+    // aba "Plano" do Treino sempre sincronizada com o que foi configurado na Semana.
+    const newGroup = updatedDayObj.group;
+    const updatedPlans =
+      newGroup && !Object.prototype.hasOwnProperty.call(state.workoutPlans || {}, newGroup)
+        ? { ...(state.workoutPlans || {}), [newGroup]: [] }
+        : state.workoutPlans;
+
     const updated = {
       ...state,
       schedule: updatedSched,
+      workoutPlans: updatedPlans,
     };
     saveState(updated);
 
@@ -1134,6 +1186,18 @@ export default function Home() {
       workoutPlans: { ...state.workoutPlans, [group]: exercises },
     };
     saveState(updated);
+  };
+
+  // Exclui um plano/divisão inteira (ex: "Legs") da lista de treinos.
+  // Diferente de esvaziar o plano: remove de vez o grupo, então ele some dos seletores.
+  // Também limpa qualquer dia da Semana que ainda apontava pra esse grupo.
+  const deleteWorkoutPlan = (group) => {
+    const updatedPlans = { ...state.workoutPlans };
+    delete updatedPlans[group];
+    const updatedSchedule = (state.schedule || []).map((d) =>
+      d.group === group ? { ...d, group: null } : d
+    );
+    saveState({ ...state, workoutPlans: updatedPlans, schedule: updatedSchedule });
   };
 
   const saveCustomExercise = async (group, name, muscle = null) => {
@@ -1402,6 +1466,7 @@ export default function Home() {
                   saveCustomExercise={saveCustomExercise}
                   workoutPlans={state.workoutPlans || DEFAULT_WORKOUT_PLANS}
                   saveWorkoutPlan={saveWorkoutPlan}
+                  deleteWorkoutPlan={deleteWorkoutPlan}
                   DEFAULT_EXERCISES={DEFAULT_EXERCISES}
                   customMuscleMap={state.customMuscleMap || {}}
                   saveCustomMuscleMap={(map) => { const u = { ...state, customMuscleMap: map }; saveState(u); }}

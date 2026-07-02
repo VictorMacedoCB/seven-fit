@@ -35,6 +35,7 @@ export default function CoachChatModal({ isOpen, onClose, workoutLogs = [] }) {
 
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages(loadHistory());
       // Carrega perfil do Supabase (ou localStorage como fallback)
       loadProfileFromCloud().then(p => setProfile(p));

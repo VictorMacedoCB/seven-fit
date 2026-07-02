@@ -53,6 +53,8 @@ export default function DietTab({
   const [activeMeal, setActiveMeal] = useState(null); // qual refeição está com busca aberta
   const [histDietDate, setHistDietDate] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
+  const [myFoodsFilter, setMyFoodsFilter] = useState("");
+  const [myFoodsCategory, setMyFoodsCategory] = useState("Todas");
   // food picked from Alimentos tab (needs meal + qty selection)
   const [pickedFood, setPickedFood] = useState(null);
   const [pickedQty, setPickedQty] = useState("100");
@@ -149,13 +151,13 @@ export default function DietTab({
     if (state.selectedFood) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedFood(state.selectedFood);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setFoodSearch(state.selectedFood.name);
       if (clearSelectedFood) {
         clearSelectedFood();
       }
     }
-  }, [state.selectedFood]);
+  }, [state.selectedFood, clearSelectedFood]);
 
   const handleExportMealPlan = () => {
     try {
@@ -684,20 +686,57 @@ export default function DietTab({
                 <div style={{ fontSize: "12px", fontWeight: "700", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px" }}>
                   Todos os Alimentos ({allFoods().length})
                 </div>
-                {allFoods().map((f) => (
-                  <div key={f.id} onClick={() => { setPickedFood(f); setPickedQty("100"); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.05)", cursor: "pointer" }}>
-                    <div style={{ flex: 1, minWidth: 0, marginRight: "8px" }}>
-                      <div style={{ fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "5px" }}>
-                        {f.name}
-                        {f.scanned && <Camera size={11} style={{ color: "#10b981", flexShrink: 0 }} />}
-                      </div>
-                      <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginTop: "2px" }}>
-                        C:{f.carbs}g · P:{f.protein}g · G:{f.fat}g · /{f.unit}
-                      </div>
+
+                {/* Busca */}
+                <div style={{ position: "relative", marginBottom: "10px" }}>
+                  <Search size={14} style={{ position: "absolute", left: "11px", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.35)" }} />
+                  <input type="text" placeholder="Buscar alimento..." value={myFoodsFilter} onChange={(e) => setMyFoodsFilter(e.target.value)} style={{ paddingLeft: "32px" }} />
+                </div>
+
+                {/* Filtro por categoria */}
+                {(() => {
+                  const cats = ["Todas", ...new Set(allFoods().map((f) => f.category).filter(Boolean))];
+                  return (
+                    <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "10px", marginBottom: "4px" }}>
+                      {cats.map((c) => (
+                        <button key={c} onClick={() => setMyFoodsCategory(c)} style={{
+                          padding: "5px 12px", borderRadius: "20px", border: "none", cursor: "pointer",
+                          fontSize: "11px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap", flexShrink: 0,
+                          background: myFoodsCategory === c ? "#f97316" : "rgba(255,255,255,0.06)",
+                          color: myFoodsCategory === c ? "#fff" : "rgba(255,255,255,0.5)",
+                        }}>{c}</button>
+                      ))}
                     </div>
-                    <span style={{ fontSize: "13px", fontWeight: "700", color: "#f97316", flexShrink: 0 }}>{f.kcal} kcal</span>
-                  </div>
-                ))}
+                  );
+                })()}
+
+                {(() => {
+                  const filtered = allFoods().filter((f) =>
+                    (myFoodsCategory === "Todas" || f.category === myFoodsCategory) &&
+                    (!myFoodsFilter || f.name.toLowerCase().includes(myFoodsFilter.toLowerCase()))
+                  );
+                  if (!filtered.length) {
+                    return <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "16px 0" }}>Nenhum alimento encontrado.</div>;
+                  }
+                  return (
+                    <div style={{ maxHeight: "420px", overflowY: "auto" }}>
+                      {filtered.map((f) => (
+                        <div key={f.id} onClick={() => { setPickedFood(f); setPickedQty("100"); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.05)", cursor: "pointer" }}>
+                          <div style={{ flex: 1, minWidth: 0, marginRight: "8px" }}>
+                            <div style={{ fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "5px" }}>
+                              {f.name}
+                              {f.scanned && <Camera size={11} style={{ color: "#10b981", flexShrink: 0 }} />}
+                            </div>
+                            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginTop: "2px" }}>
+                              C:{f.carbs}g · P:{f.protein}g · G:{f.fat}g · /{f.unit}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: "13px", fontWeight: "700", color: "#f97316", flexShrink: 0 }}>{f.kcal} kcal</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Add custom food form */}

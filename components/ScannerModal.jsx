@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Camera, X, Search, Barcode, FileText, AlertCircle, Image, Sparkles } from "lucide-react";
+import { Camera, X, Search, Barcode, FileText, AlertCircle, Image as IconImage, Sparkles } from "lucide-react";
+import NextImage from 'next/image';
+import CameraBarcodeScanner from "@/components/CameraBarcodeScanner";
 
 export default function ScannerModal({ isOpen, onClose, onFoodScanned, allFoods = [], initialTab = "barcode" }) {
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -28,13 +30,13 @@ export default function ScannerModal({ isOpen, onClose, onFoodScanned, allFoods 
     if (isOpen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveTab(initialTab);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setBarcodeError("");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setBarcodeInput("");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setModalSearchQuery("");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setModalOnlineFoods([]);
     }
   }, [isOpen, initialTab]);
@@ -78,8 +80,8 @@ export default function ScannerModal({ isOpen, onClose, onFoodScanned, allFoods 
 
   if (!isOpen) return null;
 
-  const handleBarcodeSearch = async () => {
-    const code = barcodeInput.trim();
+  const handleBarcodeSearch = async (explicitCode) => {
+    const code = (explicitCode !== undefined ? String(explicitCode) : barcodeInput).trim();
     if (!code) {
       setBarcodeError("Digite o código de barras.");
       return;
@@ -367,29 +369,15 @@ export default function ScannerModal({ isOpen, onClose, onFoodScanned, allFoods 
       {/* BARCODE PANEL */}
       {isBarcodeActive && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          <div
-            style={{
-              flex: 1,
-              background: "#111",
-              margin: "0 20px",
-              borderRadius: "20px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexDirection: "column",
-              gap: "12px",
-              color: "rgba(255,255,255,0.4)",
-              minHeight: "150px"
+          <CameraBarcodeScanner
+            onDetected={(code) => {
+              setBarcodeInput(code);
+              handleBarcodeSearch(code);
             }}
-          >
-            <Barcode size={48} style={{ color: "rgba(255,255,255,0.25)" }} />
-            <span style={{ fontSize: "13px", textAlign: "center", padding: "0 20px" }}>
-              Digite o código de barras do produto
-            </span>
-          </div>
+          />
           <div style={{ padding: "20px" }}>
             <div className="label" style={{ marginBottom: "8px" }}>
-              Código de barras
+              Ou digite o código de barras
             </div>
             <div className="row" style={{ gap: "10px" }}>
               <input
@@ -403,7 +391,7 @@ export default function ScannerModal({ isOpen, onClose, onFoodScanned, allFoods 
               <button
                 className="btn btn-primary"
                 style={{ flexShrink: 0 }}
-                onClick={handleBarcodeSearch}
+                onClick={() => handleBarcodeSearch()}
                 disabled={isBarcodeLoading}
               >
                 {isBarcodeLoading ? "Buscando..." : "Buscar"}
@@ -498,7 +486,7 @@ export default function ScannerModal({ isOpen, onClose, onFoodScanned, allFoods 
             }}
           >
             {imagePreview ? (
-              <img src={imagePreview} alt="Tabela Nutricional" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              <NextImage src={imagePreview} alt="Tabela Nutricional" width={800} height={600} style={{ width: "100%", height: "100%", objectFit: "contain" }} unoptimized />
             ) : (
               <>
                 <FileText size={48} style={{ color: "rgba(255,255,255,0.25)" }} />
@@ -565,7 +553,7 @@ export default function ScannerModal({ isOpen, onClose, onFoodScanned, allFoods 
                   fontFamily: "'DM Sans',sans-serif",
                 }}
               >
-                <Image size={14} /> Galeria
+                <IconImage size={14} /> Galeria
                 <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleLabelPhoto} />
               </label>
             </div>

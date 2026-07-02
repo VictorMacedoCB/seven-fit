@@ -58,10 +58,16 @@ const DIVISIONS = [
     ],
   },
   {
+    category: "Cardio & Complementares",
+    options: [
+      { label: "Cardio",         group: "Cardio",         emoji: "🏃", desc: "Corrida, bike, elíptico — com registro de duração/calorias" },
+      { label: "Complementares", group: "Complementares", emoji: "🧩", desc: "Abdômen, panturrilha e lombar" },
+    ],
+  },
+  {
     category: "Esporte / Atividade",
     options: [
       { label: "Jiu-Jitsu",    group: null, emoji: "🥋", desc: "Arte marcial — dia de descanso da musculação" },
-      { label: "Cardio",       group: null, emoji: "🏃", desc: "Corrida, bike, elíptico" },
       { label: "Natação",      group: null, emoji: "🏊", desc: "Treino de natação" },
       { label: "Esportes",     group: null, emoji: "⚽", desc: "Futebol, basquete, vôlei..." },
       { label: "Mobilidade",   group: null, emoji: "🧘", desc: "Yoga, alongamento, mobilidade" },
@@ -94,6 +100,7 @@ export default function EditDayModal({ isOpen, onClose, dayIndex, schedule, save
 
   useEffect(() => {
     if (!dayObj) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTypeName(dayObj.type || "");
     setExerciseGroup(dayObj.group || "");
     setCalType(dayObj.calType || "normal");

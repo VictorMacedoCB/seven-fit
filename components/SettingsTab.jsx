@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import NextImage from 'next/image';
 import { Sparkles, Camera, FileText, User, TrendingUp, Edit, Cloud, CloudOff, LogOut } from "lucide-react";
 
 export default function SettingsTab({
@@ -38,6 +39,7 @@ export default function SettingsTab({
 
   useEffect(() => {
     if (state.profile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setWeight(state.profile.weight || "");
       setHeight(state.profile.height || "");
       setAge(state.profile.age || "");
@@ -290,10 +292,13 @@ export default function SettingsTab({
         <div className="card" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.06), rgba(255,255,255,0.01))", borderColor: "rgba(16,185,129,0.15)", marginBottom: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "14px" }}>
             {user.user_metadata?.avatar_url ? (
-              <img
+              <NextImage
                 src={user.user_metadata.avatar_url}
                 alt="Avatar"
-                style={{ width: "40px", height: "40px", borderRadius: "50%", border: "2px solid #10b981" }}
+                width={40}
+                height={40}
+                style={{ borderRadius: "50%", border: "2px solid #10b981" }}
+                unoptimized
               />
             ) : (
               <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#10b981", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "700" }}>
@@ -593,8 +598,6 @@ export default function SettingsTab({
             {profileSavedStatus}
           </div>
         )}
-      </div>
-
       </div>
       </> }
 

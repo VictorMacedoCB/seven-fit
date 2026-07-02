@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import NextImage from 'next/image';
 import { TrendingDown, Flame, Timer, Dumbbell, Camera, Calendar, Scale, Target, TrendingUp } from "lucide-react";
 
 // Reusable StatCard Component
@@ -431,7 +432,7 @@ export default function ProgressTab({
                     onClick={() => document.getElementById(`photo-${angle}`).click()}
                   >
                     {pendingImages[angle] ? (
-                      <img src={pendingImages[angle]} alt={angle} />
+                      <NextImage src={pendingImages[angle]} alt={angle} width={300} height={400} style={{ width: "100%", height: "100%", objectFit: "cover" }} unoptimized />
                     ) : (
                       <>
                         <Camera size={24} style={{ color: "rgba(255,255,255,0.4)" }} />
@@ -496,10 +497,13 @@ export default function ProgressTab({
                               {a}
                             </div>
                             {entry.images[a] ? (
-                              <img
+                              <NextImage
                                 src={entry.images[a]}
                                 alt={a}
+                                width={300}
+                                height={400}
                                 style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "10px" }}
+                                unoptimized
                               />
                             ) : (
                               <div className="photo-slot" style={{ cursor: "default" }}>
