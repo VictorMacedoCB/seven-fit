@@ -413,6 +413,11 @@ input::placeholder, textarea::placeholder {
   to   { transform: translate(-50%, 0);   }
 }
 
+@keyframes fadeInDelete {
+  from { opacity: 0; transform: scale(0.5); }
+  to   { opacity: 1; transform: scale(1);   }
+}
+
 /* ─── Color Dots ─────────────────────────────────────────────── */
 .color-dot {
   width: 32px;

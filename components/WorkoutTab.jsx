@@ -46,6 +46,16 @@ const MUSCLE_SUBGROUPS = {
   Cardio: {
     "Cardio": [],
   },
+  Torso: {
+    "Peito":   ["Supino Reto","Supino Inclinado","Supino Declinado","Crucifixo","Crucifixo Inclinado","Pec Deck","Crossover"],
+    "Costas":  ["Puxada Frente","Puxada Neutra","Puxada Fechada","Barra Fixa","Pullover","Remada Curvada","Remada Unilateral","Remada Cavalinho","Remada Sentado","Serrote"],
+    "Ombro":   ["Desenvolvimento com Barra","Desenvolvimento com Halteres","Elevação Lateral","Elevação Frontal","Encolhimento","Face Pull"],
+    "Core":    ["Prancha","Abdominal na Polia","Abdominal Infra","Elevação de Pernas","Roda Abdominal","Abdominal Bicicleta","Abdominal Oblíquo","Hiperextensão Lombar"],
+  },
+  Limbs: {
+    "Braços": ["Tríceps Corda","Tríceps Testa","Tríceps Francês","Tríceps Banco","Mergulho","Extensão Tríceps","Rosca Direta","Rosca Martelo","Rosca Concentrada","Rosca 21","Rosca Inversa","Rosca Scott"],
+    "Pernas": ["Agachamento Livre","Agachamento Smith","Agachamento Sumô","Leg Press","Hack Squat","Cadeira Extensora","Avanço","Avanço com Barra","Agachamento Búlgaro","Stiff","Mesa Flexora","Cadeira Adutora","Cadeira Abdutora","Panturrilha em Pé","Panturrilha Sentado","Panturrilha no Leg Press"],
+  },
 };
 
 // Retorna o sub-músculo de um exercício dentro de um grupo
@@ -78,6 +88,20 @@ function getMuscle(group, name, customMap = {}) {
       if (primary === 'abdominais') return 'Abdômen';
       if (primary === 'panturrilhas') return 'Panturrilha';
       if (primary === 'inferior-das-costas') return 'Lombar';
+    }
+
+    if (group === 'Torso') {
+      if (primary === 'peito') return 'Peito';
+      if (['dorsais', 'meio-das-costas', 'pescoco'].includes(primary)) return 'Costas';
+      if (primary === 'trapezio') return 'Ombro';
+      if (['abdominais', 'inferior-das-costas'].includes(primary)) return 'Core';
+      // ombros já é tratado abaixo (rear delt -> Ombro nesse grupo também, já que Torso não separa Push/Pull)
+    }
+
+    if (group === 'Limbs') {
+      if (['biceps', 'antebracos', 'triceps'].includes(primary)) return 'Braços';
+      const legsMuscles = ['quadriceps', 'isquiotibiais', 'gluteos', 'panturrilhas', 'adutores', 'abdutores'];
+      if (legsMuscles.includes(primary)) return 'Pernas';
     }
 
     if (primary === 'ombros') {
@@ -199,6 +223,42 @@ export default function WorkoutTab({
   const [serieWeight, setSerieWeight] = useState("");
   const [serieReps, setSerieReps] = useState("");
   const [draggedExIdx, setDraggedExIdx] = useState(null);
+
+  // Excluir plano/divisão: em vez do "x" sempre visível, o usuário segura o chip
+  // por 3s pra revelar o botão de remover — evita exclusões acidentais.
+  const [deleteRevealGroup, setDeleteRevealGroup] = useState(null);
+  const longPressTimerRef = React.useRef(null);
+  const longPressFiredRef = React.useRef(false);
+  const [pressingGroup, setPressingGroup] = useState(null);
+
+  const startGroupLongPress = (g) => {
+    longPressFiredRef.current = false;
+    setPressingGroup(g);
+    longPressTimerRef.current = setTimeout(() => {
+      longPressFiredRef.current = true;
+      setPressingGroup(null);
+      setDeleteRevealGroup(g);
+    }, 3000);
+  };
+  const cancelGroupLongPress = () => {
+    if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+    setPressingGroup(null);
+  };
+  const confirmDeleteGroup = (g) => {
+    if (window.confirm(`Excluir o plano "${g}" inteiro? Isso remove o treino e todos os exercícios salvos dele.`)) {
+      if (selectedGroup === g) setSelectedGroup(null);
+      if (planGroup === g) planGroupTouchedRef.current = false;
+      deleteWorkoutPlan && deleteWorkoutPlan(g);
+    }
+    setDeleteRevealGroup(null);
+  };
+
+  // Esconde o botão de remover revelado automaticamente após alguns segundos sem uso.
+  useEffect(() => {
+    if (!deleteRevealGroup) return;
+    const t = setTimeout(() => setDeleteRevealGroup(null), 4000);
+    return () => clearTimeout(t);
+  }, [deleteRevealGroup]);
 
   // Cronômetro de descanso entre séries — dispara automaticamente ao registrar uma série
   const [restTimerSignal, fireRestTimer] = useRestTimerTrigger();
@@ -405,6 +465,34 @@ export default function WorkoutTab({
     return { weight: lastSet.weight, reps: lastSet.reps, date: last.date };
   };
 
+  // Todas as séries válidas da última sessão em que esse exercício apareceu — usado pra
+  // montar a "fila" de séries sugeridas (placeholders) quando o exercício é aberto sem
+  // nenhuma série feita hoje ainda. Assim o usuário só confirma/remove em vez de digitar tudo de novo.
+  const getLastSessionSets = (exName) => {
+    const logs = state.workoutLogs || [];
+    const all = [];
+    logs.forEach((w) => w.exercises.forEach((ex) => {
+      if (ex.name === exName && ex.sets && ex.sets.length) all.push({ date: w.date, sets: ex.sets });
+    }));
+    if (!all.length) return [];
+    const last = all[all.length - 1];
+    const validSets = last.sets.filter((x) => x.type === "valida");
+    const source = validSets.length ? validSets : last.sets;
+    return source.map((s) => ({ weight: s.weight, reps: s.reps, type: "valida" }));
+  };
+
+  // Fila de séries sugeridas por exercício (chave = nome do exercício). Nasce como uma cópia
+  // das séries da última sessão assim que o card é aberto sem séries feitas hoje; o usuário
+  // pode confirmar cada uma com um toque, remover (fazer uma a menos) ou adicionar mais uma
+  // (fazer uma a mais que da última vez).
+  const [pendingSetQueues, setPendingSetQueues] = useState({});
+
+  // Reseta as filas sugeridas ao trocar a data da sessão (contexto de treino diferente).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingSetQueues({});
+  }, [sessionDate]);
+
   // Efeito para auto-preencher carga/reps ao expandir card (apenas com séries já feitas HOJE).
   // Quando não há série feita hoje ainda, deixamos os campos vazios e mostramos o desempenho
   // do treino anterior como *placeholder* (texto fantasma), não como valor pré-preenchido —
@@ -423,9 +511,60 @@ export default function WorkoutTab({
         setSerieWeight("");
          
         setSerieReps("");
+        // Ainda não tem nenhuma série feita hoje: monta a fila de séries sugeridas
+        // com base na última sessão, se ainda não existir uma fila pra esse exercício.
+        setPendingSetQueues((prev) => {
+          if (prev[ex.name] !== undefined) return prev;
+          const suggested = getLastSessionSets(ex.name);
+          return suggested.length ? { ...prev, [ex.name]: suggested } : prev;
+        });
       }
     }
   }, [expandedEx, sessionExs]);
+
+  // ── handlers da fila de séries sugeridas ─────────────────────
+  // Confirma a série sugerida no topo da fila: registra ela de fato e a remove da fila.
+  const handleUseQueuedSet = (exIdx, queueIdx) => {
+    const exName = sessionExs[exIdx]?.name;
+    const queued = pendingSetQueues[exName]?.[queueIdx];
+    if (!queued) return;
+    setSessionStarted(true);
+    setSessionExs((prev) =>
+      prev.map((ex, i) =>
+        i === exIdx ? { ...ex, sets: [...ex.sets, { type: queued.type, weight: queued.weight, reps: queued.reps }] } : ex
+      )
+    );
+    setPendingSetQueues((prev) => ({
+      ...prev,
+      [exName]: (prev[exName] || []).filter((_, i) => i !== queueIdx),
+    }));
+    setRestTimerExName(exName || "");
+    fireRestTimer();
+  };
+
+  // Remove uma série da fila sem registrá-la — usado quando o usuário vai fazer
+  // uma série a menos do que na última sessão.
+  const handleRemoveQueuedSet = (exIdx, queueIdx) => {
+    const exName = sessionExs[exIdx]?.name;
+    setPendingSetQueues((prev) => ({
+      ...prev,
+      [exName]: (prev[exName] || []).filter((_, i) => i !== queueIdx),
+    }));
+  };
+
+  // Adiciona mais uma série sugerida ao fim da fila (cópia da última) — usado quando o
+  // usuário vai fazer uma série a mais do que na última sessão.
+  const handleAddQueuedSet = (exIdx) => {
+    const exName = sessionExs[exIdx]?.name;
+    const queue = pendingSetQueues[exName] || [];
+    const ex = sessionExs[exIdx];
+    const base = queue[queue.length - 1] || ex?.sets?.[ex.sets.length - 1] || getLastSetPerf(exName);
+    if (!base) return;
+    setPendingSetQueues((prev) => ({
+      ...prev,
+      [exName]: [...queue, { weight: base.weight, reps: base.reps, type: "valida" }],
+    }));
+  };
 
   // ── handlers de séries ───────────────────────────────────────
   const handleAddSet = (exIdx) => {
@@ -438,6 +577,13 @@ export default function WorkoutTab({
         i === exIdx ? { ...ex, sets: [...ex.sets, { type: serieType, weight: w, reps: r }] } : ex
       )
     );
+    // Se havia uma série sugerida na fila, ela foi "consumida" por esse registro manual —
+    // remove o topo da fila pra não sugerir a mesma série de novo.
+    const exName = sessionExs[exIdx]?.name;
+    setPendingSetQueues((prev) => {
+      if (!prev[exName] || !prev[exName].length) return prev;
+      return { ...prev, [exName]: prev[exName].slice(1) };
+    });
     // Dispara o cronômetro de descanso automaticamente após registrar a série
     setRestTimerExName(sessionExs[exIdx]?.name || "");
     fireRestTimer();
@@ -462,6 +608,14 @@ export default function WorkoutTab({
     setSessionStarted(true);
     if (expandedEx === exIdx) setExpandedEx(null);
     else if (expandedEx > exIdx) setExpandedEx((p) => p - 1);
+    if (exName) {
+      setPendingSetQueues((prev) => {
+        if (prev[exName] === undefined) return prev;
+        const next = { ...prev };
+        delete next[exName];
+        return next;
+      });
+    }
 
     // Também remove do plano permanente do grupo ativo, se ele estiver lá
     if (exName && activeGroup && workoutPlans && Array.isArray(workoutPlans[activeGroup]) && workoutPlans[activeGroup].includes(exName)) {
@@ -591,33 +745,40 @@ export default function WorkoutTab({
             )}
           </div>
 
-          {/* Group selector — planos dinâmicos */}
+          {/* Group selector — planos dinâmicos. Segure um chip por 3s pra revelar "remover". */}
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "14px" }}>
             {ALL_GROUPS.map((g) => (
               <div key={g} style={{ position: "relative", display: "inline-flex" }}>
-                <button onClick={() => { if (!sessionStarted) { setSelectedGroup(selectedGroup === g ? null : g); } else { setSelectedGroup(g); } }}
-                  style={{ padding: "7px 22px 7px 14px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif", transition: "all 0.18s",
+                <button
+                  onMouseDown={() => startGroupLongPress(g)}
+                  onMouseUp={cancelGroupLongPress}
+                  onMouseLeave={cancelGroupLongPress}
+                  onTouchStart={() => startGroupLongPress(g)}
+                  onTouchEnd={cancelGroupLongPress}
+                  onClick={() => {
+                    if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
+                    if (!sessionStarted) { setSelectedGroup(selectedGroup === g ? null : g); } else { setSelectedGroup(g); }
+                  }}
+                  style={{ padding: "7px 14px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif", transition: "all 0.18s",
+                    transform: pressingGroup === g ? "scale(0.94)" : "scale(1)",
+                    boxShadow: pressingGroup === g ? "0 0 0 2px rgba(239,68,68,0.5)" : "none",
                     background: activeGroup === g ? "#f97316" : "rgba(255,255,255,0.07)", color: activeGroup === g ? "#fff" : "rgba(255,255,255,0.5)" }}>
                   {g}
                 </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (window.confirm(`Excluir o plano "${g}" inteiro? Isso remove o treino e todos os exercícios salvos dele.`)) {
-                      if (selectedGroup === g) setSelectedGroup(null);
-                      if (planGroup === g) planGroupTouchedRef.current = false;
-                      deleteWorkoutPlan && deleteWorkoutPlan(g);
-                    }
-                  }}
-                  title={`Excluir plano "${g}"`}
-                  style={{
-                    position: "absolute", top: "-5px", right: "-5px", width: "16px", height: "16px",
-                    borderRadius: "50%", border: "1px solid rgba(0,0,0,0.3)", background: "#ef4444", color: "#fff",
-                    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0,
-                  }}
-                >
-                  <X size={9} strokeWidth={3} />
-                </button>
+                {deleteRevealGroup === g && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); confirmDeleteGroup(g); }}
+                    title={`Excluir plano "${g}"`}
+                    style={{
+                      position: "absolute", top: "-8px", right: "-8px", width: "18px", height: "18px",
+                      borderRadius: "50%", border: "1px solid rgba(0,0,0,0.3)", background: "#ef4444", color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0,
+                      animation: "fadeInDelete 0.15s ease-out",
+                    }}
+                  >
+                    <X size={10} strokeWidth={3} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -852,6 +1013,49 @@ export default function WorkoutTab({
                   {/* Formulário expansível inline */}
                   {isOpen && (
                     <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.015)" }}>
+                      {/* Fila de séries sugeridas com base na última sessão — toque pra confirmar,
+                          X pra pular (uma série a menos), + pra acrescentar (uma série a mais) */}
+                      {(pendingSetQueues[ex.name] || []).length > 0 && (
+                        <div style={{ marginBottom: "12px", padding: "8px 10px", borderRadius: "10px", border: "1px dashed rgba(249,115,22,0.3)", background: "rgba(249,115,22,0.05)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                            <History size={11} style={{ color: "#f97316", flexShrink: 0 }} />
+                            <span style={{ fontSize: "10px", fontWeight: "700", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.3px" }}>
+                              Igual ao último treino — confirme ou ajuste
+                            </span>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                            {pendingSetQueues[ex.name].map((qs, qIdx) => (
+                              <div key={qIdx} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span style={{ display: "inline-flex", width: "18px", height: "18px", borderRadius: "50%", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)", fontSize: "10px", fontWeight: "800", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  {(ex.sets?.length || 0) + qIdx + 1}
+                                </span>
+                                <button
+                                  onClick={() => handleUseQueuedSet(exIdx, qIdx)}
+                                  style={{ flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 10px", borderRadius: "8px", border: "none", background: "rgba(255,255,255,0.05)", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                                  title="Confirmar essa série"
+                                >
+                                  <span style={{ fontSize: "12px", fontWeight: "700", color: "rgba(255,255,255,0.75)" }}>{qs.weight}kg × {qs.reps} reps</span>
+                                  <span style={{ display: "flex", alignItems: "center", gap: "3px", fontSize: "10px", fontWeight: "700", color: "#22c55e" }}><CheckCircle2 size={12} /> usar</span>
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveQueuedSet(exIdx, qIdx)}
+                                  title="Pular essa série (fazer uma a menos)"
+                                  style={{ flexShrink: 0, width: "26px", height: "26px", borderRadius: "8px", border: "none", background: "rgba(239,68,68,0.1)", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => handleAddQueuedSet(exIdx)}
+                            title="Adicionar mais uma série (fazer uma a mais)"
+                            style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "8px", padding: "5px 8px", borderRadius: "7px", border: "1px dashed rgba(255,255,255,0.15)", background: "none", color: "rgba(255,255,255,0.45)", fontSize: "10px", fontWeight: "700", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                          >
+                            <Plus size={11} /> Mais uma série
+                          </button>
+                        </div>
+                      )}
                       {/* Chip com desempenho do treino anterior — toque pra copiar pros campos */}
                       {lastSet && (
                         <button
@@ -1275,33 +1479,40 @@ export default function WorkoutTab({
       {/* ─────────── PLANO ─────────── */}
       {activeSubTab === "plan" && (
         <div>
-          {/* Seletor de planos existentes */}
+          {/* Seletor de planos existentes — segure um chip por 3s pra revelar "remover" */}
           <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
             {ALL_GROUPS.map((g) => (
               <div key={g} style={{ position: "relative", display: "inline-flex" }}>
-                <button onClick={() => { planGroupTouchedRef.current = true; setPlanGroup(g); setPlanSearch(""); setShowLibrary(false); }}
-                  style={{ padding:"7px 22px 7px 14px", borderRadius:10, border:"none", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
+                <button
+                  onMouseDown={() => startGroupLongPress(g)}
+                  onMouseUp={cancelGroupLongPress}
+                  onMouseLeave={cancelGroupLongPress}
+                  onTouchStart={() => startGroupLongPress(g)}
+                  onTouchEnd={cancelGroupLongPress}
+                  onClick={() => {
+                    if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
+                    planGroupTouchedRef.current = true; setPlanGroup(g); setPlanSearch(""); setShowLibrary(false);
+                  }}
+                  style={{ padding:"7px 14px", borderRadius:10, border:"none", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
+                    transform: pressingGroup === g ? "scale(0.94)" : "scale(1)",
+                    boxShadow: pressingGroup === g ? "0 0 0 2px rgba(239,68,68,0.5)" : "none",
                     background: planGroup===g ? "#f97316" : "rgba(255,255,255,0.07)", color: planGroup===g ? "#fff" : "rgba(255,255,255,0.5)" }}>
                   {g}
                 </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (window.confirm(`Excluir o plano "${g}" inteiro? Isso remove o treino e todos os exercícios salvos dele.`)) {
-                      if (selectedGroup === g) setSelectedGroup(null);
-                      if (planGroup === g) planGroupTouchedRef.current = false;
-                      deleteWorkoutPlan && deleteWorkoutPlan(g);
-                    }
-                  }}
-                  title={`Excluir plano "${g}"`}
-                  style={{
-                    position: "absolute", top: "-5px", right: "-5px", width: "16px", height: "16px",
-                    borderRadius: "50%", border: "1px solid rgba(0,0,0,0.3)", background: "#ef4444", color: "#fff",
-                    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0,
-                  }}
-                >
-                  <X size={9} strokeWidth={3} />
-                </button>
+                {deleteRevealGroup === g && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); confirmDeleteGroup(g); }}
+                    title={`Excluir plano "${g}"`}
+                    style={{
+                      position: "absolute", top: "-8px", right: "-8px", width: "18px", height: "18px",
+                      borderRadius: "50%", border: "1px solid rgba(0,0,0,0.3)", background: "#ef4444", color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0,
+                      animation: "fadeInDelete 0.15s ease-out",
+                    }}
+                  >
+                    <X size={10} strokeWidth={3} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

@@ -678,41 +678,70 @@ export default function Home() {
     return [...ALL_DEFAULT_FOODS, ...(state.customFoods || [])];
   };
 
+  // Mapeia o músculo primário (+ nome do exercício, pra distinguir deltoide posterior)
+  // de um exercício da base pra um "bucket" canônico de músculo.
+  const muscleBucket = (primary, nameNorm) => {
+    if (!primary) return null;
+    if (primary === 'ombros') {
+      const isRearDelt = nameNorm.includes('invertido') ||
+                         nameNorm.includes('inverso') ||
+                         nameNorm.includes('posterior') ||
+                         nameNorm.includes('rear delt') ||
+                         nameNorm.includes('face pull');
+      return isRearDelt ? 'ombro-posterior' : 'ombro';
+    }
+    const map = {
+      peito: 'peito',
+      triceps: 'triceps',
+      trapezio: 'trapezio',
+      dorsais: 'costas',
+      'meio-das-costas': 'costas',
+      'inferior-das-costas': 'lombar',
+      biceps: 'biceps',
+      antebracos: 'biceps',
+      pescoco: 'costas',
+      quadriceps: 'quad',
+      isquiotibiais: 'posterior-perna',
+      gluteos: 'posterior-perna',
+      panturrilhas: 'panturrilha',
+      adutores: 'adutor',
+      abdutores: 'adutor',
+      abdominais: 'abdomen',
+    };
+    return map[primary] || null;
+  };
+
+  // Pra cada "bucket" de músculo, quais divisões/planos de treino ele deve aparecer.
+  // Isso substitui a lista antiga que só cobria Push/Pull/Legs/Upper/Lower — qualquer
+  // divisão nova adicionada em EditDayModal (Torso, Limbs, Full Body, Anterior,
+  // Posterior, splits por músculo, etc.) precisa só ganhar uma entrada aqui.
+  const FULL_BODY_GROUPS = ['Full Body', 'Full Body A', 'Full Body B'];
+  const BUCKET_GROUPS = {
+    'peito':            ['Push', 'Upper', 'Torso', 'Anterior', 'Peito', ...FULL_BODY_GROUPS],
+    'triceps':          ['Push', 'Upper', 'Limbs', 'Posterior', 'Braços', 'Peito', ...FULL_BODY_GROUPS],
+    'trapezio':         ['Push', 'Upper', 'Torso', 'Ombro', ...FULL_BODY_GROUPS],
+    'ombro':            ['Push', 'Upper', 'Torso', 'Anterior', 'Ombro', ...FULL_BODY_GROUPS],
+    'ombro-posterior':  ['Pull', 'Upper', 'Torso', 'Posterior', 'Ombro', ...FULL_BODY_GROUPS],
+    'costas':           ['Pull', 'Upper', 'Torso', 'Posterior', 'Costas', ...FULL_BODY_GROUPS],
+    'lombar':           ['Pull', 'Upper', 'Torso', 'Posterior', 'Costas', 'Complementares', 'Core', ...FULL_BODY_GROUPS],
+    'biceps':           ['Pull', 'Upper', 'Lower', 'Limbs', 'Anterior', 'Braços', 'Costas', ...FULL_BODY_GROUPS],
+    'quad':             ['Legs', 'Lower', 'Limbs', 'Anterior', 'Quad', ...FULL_BODY_GROUPS],
+    'posterior-perna':  ['Legs', 'Lower', 'Limbs', 'Posterior', 'Pernas', ...FULL_BODY_GROUPS],
+    'panturrilha':      ['Legs', 'Lower', 'Limbs', 'Posterior', 'Complementares', 'Pernas', ...FULL_BODY_GROUPS],
+    'adutor':           ['Legs', 'Lower', 'Limbs', 'Anterior', 'Quad', 'Pernas', ...FULL_BODY_GROUPS],
+    'abdomen':          ['Legs', 'Lower', 'Torso', 'Anterior', 'Core', 'Complementares', ...FULL_BODY_GROUPS],
+  };
+
   const getExercises = (group) => {
     if (!group) return [];
-    
-    const mapMuscleToGroup = (ex) => {
-      const primary = ex.primaryMuscles?.[0];
-      if (!primary) return null;
-      const nameNorm = ex.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      if (primary === 'ombros') {
-        const isRearDelt = nameNorm.includes('invertido') || 
-                           nameNorm.includes('inverso') || 
-                           nameNorm.includes('posterior') || 
-                           nameNorm.includes('rear delt') ||
-                           nameNorm.includes('face pull');
-        if (isRearDelt) return 'Pull';
-        return 'Push';
-      }
-      const pushMuscles = ['peito', 'triceps', 'trapezio'];
-      const pullMuscles = ['dorsais', 'meio-das-costas', 'inferior-das-costas', 'biceps', 'antebracos', 'pescoco'];
-      const legsMuscles = ['quadriceps', 'isquiotibiais', 'gluteos', 'panturrilhas', 'adutores', 'abdutores', 'abdominais'];
-      
-      if (pushMuscles.includes(primary)) return 'Push';
-      if (pullMuscles.includes(primary)) return 'Pull';
-      if (legsMuscles.includes(primary)) return 'Legs';
-      return null;
-    };
 
     const dbExercises = exercisesDb.filter(ex => {
       const primary = ex.primaryMuscles?.[0];
-      const mapped = mapMuscleToGroup(ex);
-      if (group === 'Push') return mapped === 'Push';
-      if (group === 'Pull') return mapped === 'Pull';
-      if (group === 'Legs') return mapped === 'Legs';
-      if (group === 'Upper') return mapped === 'Push' || mapped === 'Pull';
-      if (group === 'Lower') return mapped === 'Legs' || primary === 'biceps';
-      return false;
+      const nameNorm = ex.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const bucket = muscleBucket(primary, nameNorm);
+      if (!bucket) return false;
+      const groups = BUCKET_GROUPS[bucket] || [];
+      return groups.includes(group);
     }).map(ex => ex.name);
 
     return [

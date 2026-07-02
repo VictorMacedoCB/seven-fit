@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import DietPlanEditor from "@/components/DietPlanEditor";
-import { Search, Camera, Upload, Download, Trash2, Settings, Flame, X, Plus, ChevronDown, ChevronUp, History } from "lucide-react";
+import { Search, Camera, Upload, Download, Trash2, Settings, Flame, X, Plus, ChevronDown, ChevronUp, History, Barcode } from "lucide-react";
 
 // Reusable ProgressBar Component
 function ProgressBar({ val, max, color, label, unit = "" }) {
@@ -424,13 +424,24 @@ export default function DietTab({
                   </div>
                 ))}
 
-                {/* Add button */}
-                <button
-                  onClick={() => isOpen ? setActiveMeal(null) : openMealSearch(meal)}
-                  style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "11px 16px", display: "flex", alignItems: "center", gap: "6px", color: "#f97316", fontSize: "13px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif" }}
-                >
-                  <span style={{ fontSize: "18px", lineHeight: 1 }}>+</span> Adicionar alimentos
-                </button>
+                {/* Add button + Scanner de código de barras */}
+                <div style={{ display: "flex", alignItems: "stretch", borderTop: mealLogs.length ? "none" : undefined }}>
+                  <button
+                    onClick={() => isOpen ? setActiveMeal(null) : openMealSearch(meal)}
+                    style={{ flex: 1, background: "none", border: "none", cursor: "pointer", padding: "11px 16px", display: "flex", alignItems: "center", gap: "6px", color: "#f97316", fontSize: "13px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif" }}
+                  >
+                    <span style={{ fontSize: "18px", lineHeight: 1 }}>+</span> Adicionar alimentos
+                  </button>
+                  {openScanner && (
+                    <button
+                      onClick={() => { openMealSearch(meal); openScanner("barcode"); }}
+                      title="Escanear código de barras"
+                      style={{ flexShrink: 0, width: "44px", background: "none", border: "none", borderLeft: "1px solid rgba(255,255,255,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(249,115,22,0.75)" }}
+                    >
+                      <Barcode size={16} />
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
