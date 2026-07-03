@@ -247,7 +247,16 @@ export default function WorkoutTab({
   const confirmDeleteGroup = (g) => {
     if (window.confirm(`Excluir o plano "${g}" inteiro? Isso remove o treino e todos os exercícios salvos dele.`)) {
       if (selectedGroup === g) setSelectedGroup(null);
-      if (planGroup === g) planGroupTouchedRef.current = false;
+      if (planGroup === g) {
+        // Sem isso, "planGroup" ficava apontando pra um grupo que não existe mais em
+        // workoutPlans (fantasma) até o usuário trocar de plano manualmente — o que causava
+        // referências a um grupo indefinido em vários lugares da aba "Plano".
+        planGroupTouchedRef.current = true;
+        const remaining = Object.keys(workoutPlans || {}).filter((k) => k !== g);
+        setPlanGroup(remaining[0] || "");
+        setShowLibrary(false);
+        setPlanSearch("");
+      }
       deleteWorkoutPlan && deleteWorkoutPlan(g);
     }
     setDeleteRevealGroup(null);
@@ -358,19 +367,24 @@ export default function WorkoutTab({
     return <CheckCircle2 size={size} />;
   };
 
+  const FALLBACK_SCHEDULE = [
+    { day: "Seg", type: "Push", color: "#f97316", calType: "normal", group: "Push" },
+    { day: "Ter", type: "Pull", color: "#3b82f6", calType: "normal", group: "Pull" },
+    { day: "Qua", type: "Legs 🦵", color: "#8b5cf6", calType: "heavy", group: "Legs" },
+    { day: "Qui", type: "Jiu-Jitsu 🥋", color: "#10b981", calType: "normal", group: "Upper" },
+    { day: "Sex", type: "Upper", color: "#f59e0b", calType: "normal", group: "Upper" },
+    { day: "Sab", type: "Lower 🦵", color: "#ec4899", calType: "heavy", group: "Lower" },
+    { day: "Dom", type: "Descanso 🍕", color: "#6b7280", calType: "free", group: null },
+  ];
+
   function schedForDate(dateStr) {
     const d = new Date(dateStr + "T12:00:00");
     const dow = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"][d.getDay()];
-    const schedule = state?.schedule || [
-      { day: "Seg", type: "Push", color: "#f97316", calType: "normal", group: "Push" },
-      { day: "Ter", type: "Pull", color: "#3b82f6", calType: "normal", group: "Pull" },
-      { day: "Qua", type: "Legs 🦵", color: "#8b5cf6", calType: "heavy", group: "Legs" },
-      { day: "Qui", type: "Jiu-Jitsu 🥋", color: "#10b981", calType: "normal", group: "Upper" },
-      { day: "Sex", type: "Upper", color: "#f59e0b", calType: "normal", group: "Upper" },
-      { day: "Sab", type: "Lower 🦵", color: "#ec4899", calType: "heavy", group: "Lower" },
-      { day: "Dom", type: "Descanso 🍕", color: "#6b7280", calType: "free", group: null }
-    ];
-    return schedule.find((x) => x.day === dow) || schedule[6];
+    // "state?.schedule || FALLBACK_SCHEDULE" só cobre undefined/null — um array vazio ([])
+    // é "truthy" em JS e passava direto, deixando "schedule" vazio e schedule[6] undefined,
+    // o que quebrava com "Cannot read properties of undefined (reading 'group')".
+    const schedule = (state?.schedule && state.schedule.length) ? state.schedule : FALLBACK_SCHEDULE;
+    return schedule.find((x) => x.day === dow) || schedule[6] || FALLBACK_SCHEDULE[6];
   }
 
   const s = schedForDate(sessionDate);

@@ -237,7 +237,7 @@ export default function Home() {
       localStorage.setItem("co_customExercises", JSON.stringify(data.customExercises || {}));
       localStorage.setItem("co_customMuscleMap", JSON.stringify(data.customMuscleMap || {}));
       localStorage.setItem("co_workoutPlans", JSON.stringify(data.workoutPlans || DEFAULT_WORKOUT_PLANS));
-      localStorage.setItem("co_schedule", JSON.stringify(data.schedule || DEFAULT_SCHEDULE));
+      localStorage.setItem("co_schedule", JSON.stringify((data.schedule && data.schedule.length === 7) ? data.schedule : DEFAULT_SCHEDULE));
       localStorage.setItem("co_progressPhotos", JSON.stringify(data.progressPhotos || []));
       localStorage.setItem("co_profile", JSON.stringify(data.profile || DEFAULT_PROFILE));
       localStorage.setItem("co_mealPlan", JSON.stringify(data.mealPlan || DEFAULT_MEAL_PLAN));
@@ -561,9 +561,10 @@ export default function Home() {
   };
 
   const todaySched = () => {
-    console.log("DEBUG: state is", state);
-    console.log("DEBUG: state.schedule is", state ? state.schedule : "state_is_null");
-    return (state.schedule || DEFAULT_SCHEDULE).find((s) => s.day === getDOW()) || (state.schedule || DEFAULT_SCHEDULE)[6];
+    // "|| DEFAULT_SCHEDULE" só entra em ação se schedule for undefined/null — um array
+    // vazio ([]) é "truthy" em JS e passava direto, quebrando a busca do dia da semana.
+    const sched = (state.schedule && state.schedule.length === 7) ? state.schedule : DEFAULT_SCHEDULE;
+    return sched.find((s) => s.day === getDOW()) || sched[6] || DEFAULT_SCHEDULE[6];
   };
 
   // ── DYNAMIC METABOLIC CALCULATION UTILS ─────────────────────────────────────
@@ -1223,7 +1224,12 @@ export default function Home() {
   const deleteWorkoutPlan = (group) => {
     const updatedPlans = { ...state.workoutPlans };
     delete updatedPlans[group];
-    const updatedSchedule = (state.schedule || []).map((d) =>
+    // Importante: usar DEFAULT_SCHEDULE (não []) como fallback. Se essa função rodar num
+    // instante em que state.schedule ainda está undefined (ex: durante a sincronização com
+    // a nuvem logo após o login), "state.schedule || []" apagava a semana inteira de vez —
+    // porque o resultado ([].map(...) = []) era salvo de volta no estado e no localStorage.
+    const baseSchedule = (state.schedule && state.schedule.length === 7) ? state.schedule : DEFAULT_SCHEDULE;
+    const updatedSchedule = baseSchedule.map((d) =>
       d.group === group ? { ...d, group: null } : d
     );
     saveState({ ...state, workoutPlans: updatedPlans, schedule: updatedSchedule });
