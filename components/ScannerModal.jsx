@@ -173,7 +173,7 @@ export default function ScannerModal({ isOpen, onClose, onFoodScanned, allFoods 
       }}
     >
       {/* HEADER */}
-      <div className="row-sb" style={{ padding: "20px 20px 10px" }}>
+      <div className="row-sb" style={{ padding: "calc(20px + env(safe-area-inset-top, 0px)) 20px 10px" }}>
         <div className="syne" style={{ fontSize: "16px", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px" }}>
           <Camera size={18} /> Buscar Alimento
         </div>
