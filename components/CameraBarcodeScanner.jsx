@@ -4,24 +4,30 @@ import React, { useEffect, useRef, useState } from "react";
 import { Barcode, Camera as CameraIcon, AlertCircle } from "lucide-react";
 
 /**
- * Escaneia código de barras usando a câmera do dispositivo, via BarcodeDetector nativo
- * (suportado em Chrome/Android e navegadores baseados em Chromium). Em navegadores sem
- * suporte (ex: Safari/iOS mais antigo), cai graciosamente para o campo manual já existente.
+ * Escaneia código de barras usando a câmera do dispositivo.
+ *
+ * Antes usava a API nativa `BarcodeDetector`, que só existe no Chrome/Chromium em
+ * Android (e olhe lá, dependendo da versão) — no Safari/iOS ela nunca existiu, então
+ * o app caía direto na mensagem de "navegador incompatível" pra qualquer pessoa usando
+ * iPhone, além de vários navegadores Android/desktop. Agora usa a biblioteca @zxing/browser
+ * (JS puro, gratuita, roda em cima de getUserMedia + canvas), que funciona em praticamente
+ * qualquer navegador moderno — Safari incluso. Só cai no aviso de "não suportado" se o
+ * próprio getUserMedia não existir, o que é raro hoje em dia.
  */
 export default function CameraBarcodeScanner({ onDetected }) {
   const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const rafRef = useRef(null);
+  const controlsRef = useRef(null);
   const [status, setStatus] = useState("idle"); // idle | starting | scanning | unsupported | denied | error
-  const [lastCode, setLastCode] = useState("");
+  const lastCodeRef = useRef("");
 
-  const supported = typeof window !== "undefined" && "BarcodeDetector" in window;
+  const supported =
+    typeof window !== "undefined" &&
+    !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
   const stop = () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+    if (controlsRef.current) {
+      try { controlsRef.current.stop(); } catch (e) { /* noop */ }
+      controlsRef.current = null;
     }
   };
 
@@ -32,41 +38,46 @@ export default function CameraBarcodeScanner({ onDetected }) {
     }
     setStatus("starting");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setStatus("scanning");
+      // Import dinâmico: mantém essas libs fora do bundle inicial, já que só são
+      // necessárias quando o scanner de câmera é realmente aberto.
+      const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([
+        import("@zxing/browser"),
+        import("@zxing/library"),
+      ]);
 
-      const detector = new window.BarcodeDetector({
-        formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code"],
-      });
+      const hints = new Map();
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.UPC_A,
+        BarcodeFormat.UPC_E,
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39,
+        BarcodeFormat.QR_CODE,
+      ]);
+      hints.set(DecodeHintType.TRY_HARDER, true);
 
-      const tick = async () => {
-        if (!videoRef.current || videoRef.current.readyState < 2) {
-          rafRef.current = requestAnimationFrame(tick);
-          return;
-        }
-        try {
-          const codes = await detector.detect(videoRef.current);
-          if (codes && codes.length > 0) {
-            const value = codes[0].rawValue;
-            if (value && value !== lastCode) {
-              setLastCode(value);
+      const reader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 150 });
+
+      const controls = await reader.decodeFromConstraints(
+        { video: { facingMode: "environment" } },
+        videoRef.current,
+        (result, err) => {
+          if (result) {
+            const value = result.getText();
+            if (value && value !== lastCodeRef.current) {
+              lastCodeRef.current = value;
               if (navigator.vibrate) navigator.vibrate(80);
               stop();
               onDetected && onDetected(value);
-              return;
             }
           }
-        } catch (e) { /* frame não decodificável, tenta o próximo */ }
-        rafRef.current = requestAnimationFrame(tick);
-      };
-      rafRef.current = requestAnimationFrame(tick);
+          // "err" dispara a cada frame sem código detectado (NotFoundException) —
+          // isso é esperado e não deve ser tratado como falha.
+        }
+      );
+      controlsRef.current = controls;
+      setStatus("scanning");
     } catch (e) {
       setStatus(e && e.name === "NotAllowedError" ? "denied" : "error");
     }

@@ -20,6 +20,7 @@ import ScannerModal from "@/components/ScannerModal";
 import EditDayModal from "@/components/EditDayModal";
 import HistoryModal from "@/components/HistoryModal";
 import ExerciseGuideModal from "@/components/ExerciseGuideModal";
+import { useRestTimer, useRestTimerTrigger } from "@/components/RestTimer";
 import exercisesDb from "@/lib/exercises-ptbr.json";
 import foodsPtbr from "@/lib/foods-ptbr.json";
 
@@ -189,6 +190,14 @@ export default function Home() {
   const [historyExName, setHistoryExName] = useState("");
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [guideExName, setGuideExName] = useState("");
+
+  // Cronômetro de descanso: o hook fica no nível raiz do app (não dentro da aba
+  // Treino) para que trocar de aba não resete o tempo restante. O ícone visual,
+  // porém, é renderizado dentro do quadro "Treino de Hoje" (veja WorkoutTab) — antes
+  // ficava fixo flutuando na tela e cobria o botão do Coach de IA.
+  const [restTimerSignal, fireRestTimer] = useRestTimerTrigger();
+  const [restTimerExName, setRestTimerExName] = useState("");
+  const restTimer = useRestTimer(restTimerSignal, restTimerExName);
   // ── HYDRATION & LOADING STATE ──────────────────────────────────────────────
   const loadLocalState = () => {
     try {
@@ -334,6 +343,13 @@ export default function Home() {
       customMuscleMap: mergedCustomMuscleMap,
       progressPhotos: mergedProgressPhotos,
       schedule: (cloudData.schedule && cloudData.schedule.length === 7) ? cloudData.schedule : localState.schedule,
+      // Planos de treino: mescla por grupo. A nuvem é a fonte da verdade pros grupos que
+      // já foram sincronizados (evita reviver uma lista antiga só porque ela ainda está
+      // em cache local), mas mantém grupos que só existem localmente (ex: criados agora
+      // mesmo, offline, e ainda não enviados).
+      workoutPlans: (cloudData.workoutPlans && Object.keys(cloudData.workoutPlans).length)
+        ? { ...(localState.workoutPlans || {}), ...cloudData.workoutPlans }
+        : localState.workoutPlans,
       profile: cloudData.profile ? { ...localState.profile, ...cloudData.profile } : localState.profile,
       mealPlan: cloudData.mealPlan || localState.mealPlan,
       selectedFood: null
@@ -424,6 +440,21 @@ export default function Home() {
           } catch (err) {
             console.error("Error syncing custom food:", err);
           }
+        }
+      }
+
+      // 4b. Sync Workout Plans (grupos criados localmente que a nuvem ainda não tem,
+      // ou grupos com exercícios adicionados enquanto offline)
+      const cloudPlans = dbData.workoutPlans || {};
+      const localPlans = syncedState.workoutPlans || {};
+      const plansDiffer = Object.keys(localPlans).some(
+        (g) => JSON.stringify(localPlans[g]) !== JSON.stringify(cloudPlans[g])
+      );
+      if (plansDiffer) {
+        try {
+          await db.saveWorkoutPlans(userId, localPlans);
+        } catch (err) {
+          console.error("Error syncing workout plans:", err);
         }
       }
 
@@ -1211,11 +1242,21 @@ export default function Home() {
 
   // Salva o plano de exercícios de um grupo (lista editável pelo usuário)
   const saveWorkoutPlan = (group, exercises) => {
+    const updatedPlans = { ...state.workoutPlans, [group]: exercises };
     const updated = {
       ...state,
-      workoutPlans: { ...state.workoutPlans, [group]: exercises },
+      workoutPlans: updatedPlans,
     };
     saveState(updated);
+
+    // Antes esta função só salvava no localStorage — os planos nunca chegavam na
+    // tabela "workout_plans" do Supabase, então "sincronizava" na aparência (o ícone
+    // girava por causa de outras coisas) mas essa parte dos dados nunca ia pra nuvem.
+    if (user) {
+      db.saveWorkoutPlans(user.id, updatedPlans).catch((err) => {
+        console.error("Failed to save workout plans to cloud:", err);
+      });
+    }
   };
 
   // Exclui um plano/divisão inteira (ex: "Legs") da lista de treinos.
@@ -1233,6 +1274,12 @@ export default function Home() {
       d.group === group ? { ...d, group: null } : d
     );
     saveState({ ...state, workoutPlans: updatedPlans, schedule: updatedSchedule });
+
+    if (user) {
+      db.saveWorkoutPlans(user.id, updatedPlans).catch((err) => {
+        console.error("Failed to save workout plans to cloud:", err);
+      });
+    }
   };
 
   const saveCustomExercise = async (group, name, muscle = null) => {
@@ -1511,6 +1558,9 @@ export default function Home() {
                   openHistoryModal={openHistoryModal}
                   openGuideModal={openGuideModal}
   openAiPlanModal={(group)=>setAiPlanModal({open:true,group})}
+                  fireRestTimer={fireRestTimer}
+                  setRestTimerExName={setRestTimerExName}
+                  restTimer={restTimer}
                 />
               )}
               {activeTab === "progress" && (

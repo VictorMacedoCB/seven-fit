@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { Flame, CheckCircle2, BookOpen, History, X, Plus, Save, Zap, Droplets, Search, ChevronDown, ChevronUp, Trash2, GripVertical } from "lucide-react";
 import exercisesDb from "@/lib/exercises-ptbr.json";
-import RestTimer, { useRestTimerTrigger } from "@/components/RestTimer";
+import { RestTimerBadge } from "@/components/RestTimer";
+
 
 // Sub-grupamentos musculares por tipo de treino
 const MUSCLE_SUBGROUPS = {
@@ -162,6 +163,9 @@ export default function WorkoutTab({
   openHistoryModal,
   openGuideModal,
   openAiPlanModal,
+  fireRestTimer,
+  setRestTimerExName,
+  restTimer,
 }) {
   // Planos dinâmicos: usa os que existem no workoutPlans + fallback se vazio
   const ALL_GROUPS = workoutPlans && Object.keys(workoutPlans).length
@@ -268,10 +272,6 @@ export default function WorkoutTab({
     const t = setTimeout(() => setDeleteRevealGroup(null), 4000);
     return () => clearTimeout(t);
   }, [deleteRevealGroup]);
-
-  // Cronômetro de descanso entre séries — dispara automaticamente ao registrar uma série
-  const [restTimerSignal, fireRestTimer] = useRestTimerTrigger();
-  const [restTimerExName, setRestTimerExName] = useState("");
 
   // Busca para adicionar exercício extra
   const [showAddEx, setShowAddEx] = useState(false);
@@ -637,6 +637,10 @@ export default function WorkoutTab({
     }
   };
 
+  // Adiciona o exercício à sessão de hoje E ao plano salvo do grupo, em uma única ação —
+  // sem isso, o exercício ficava só na sessão de hoje (cache local), então sumia ao trocar
+  // de aba antes de logar uma série, ou simplesmente não aparecia mais numa próxima sessão/
+  // semana seguinte, porque nunca tinha sido salvo em workoutPlans[activeGroup].
   const handleAddExToSession = (name) => {
     if (sessionExs.some((e) => e.name === name)) return;
     setSessionExs((prev) => {
@@ -648,6 +652,11 @@ export default function WorkoutTab({
     setSessionStarted(true);
     // O painel agora fica aberto para permitir múltiplos cadastros
     setExSearch("");
+
+    // Também adiciona ao plano permanente do grupo ativo, se ainda não estiver lá
+    if (activeGroup && !(workoutPlans[activeGroup] || []).includes(name)) {
+      saveWorkoutPlan(activeGroup, [...(workoutPlans[activeGroup] || []), name]);
+    }
   };
 
   const handleSaveWorkout = () => {
@@ -730,7 +739,8 @@ export default function WorkoutTab({
   return (
     <div>
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg, ${s.color}18, rgba(255,255,255,0.02))`, border: `1px solid ${s.color}30`, borderRadius: "20px", padding: "18px 20px", marginBottom: "14px" }}>
+      <div style={{ position: "relative", background: `linear-gradient(135deg, ${s.color}18, rgba(255,255,255,0.02))`, border: `1px solid ${s.color}30`, borderRadius: "20px", padding: "18px 20px", marginBottom: "14px" }}>
+        {restTimer && <RestTimerBadge timer={restTimer} />}
         <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)", marginBottom: "3px" }}>
           {sessionDate === today() ? "Treino de Hoje" : `Treino de ${fmtDate(sessionDate)}`}
         </div>
@@ -771,7 +781,30 @@ export default function WorkoutTab({
                   onTouchEnd={cancelGroupLongPress}
                   onClick={() => {
                     if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
-                    if (!sessionStarted) { setSelectedGroup(selectedGroup === g ? null : g); } else { setSelectedGroup(g); }
+                    if (g === activeGroup) {
+                      // Clicar no grupo já ativo apenas desmarca a seleção manual (volta a
+                      // seguir o grupo programado na Semana), só faz sentido antes de logar séries.
+                      if (!sessionStarted) setSelectedGroup(null);
+                      return;
+                    }
+                    // Bug corrigido: antes, depois de registrar a primeira série (sessionStarted
+                    // = true), trocar de grupo só atualizava a aba selecionada — a lista de
+                    // exercícios continuava sendo a do grupo anterior (ex: Push ficava aparecendo
+                    // mesmo depois de trocar pra Pull). Agora a lista é sempre recarregada do
+                    // plano do novo grupo.
+                    const hasLoggedSets = sessionExs.some((e) => e.sets && e.sets.length > 0);
+                    const doSwitch = () => {
+                      setSelectedGroup(g);
+                      const plan = (workoutPlans && workoutPlans[g]) || [];
+                      setSessionExs(plan.map((name) => ({ name, sets: [] })));
+                    };
+                    if (hasLoggedSets) {
+                      if (window.confirm(`Trocar para "${g}" vai substituir os exercícios da sessão atual (as séries já registradas nesta troca não ficam salvas). Continuar?`)) {
+                        doSwitch();
+                      }
+                    } else {
+                      doSwitch();
+                    }
                   }}
                   style={{ padding: "7px 14px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "700", fontFamily: "'DM Sans',sans-serif", transition: "all 0.18s",
                     transform: pressingGroup === g ? "scale(0.94)" : "scale(1)",
@@ -1836,7 +1869,6 @@ export default function WorkoutTab({
           )}
         </div>
       )}
-      <RestTimer autoStartSignal={restTimerSignal} exerciseName={restTimerExName} />
     </div>
   );
 }
