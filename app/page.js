@@ -199,6 +199,15 @@ export default function Home() {
   const [restTimerExName, setRestTimerExName] = useState("");
   const restTimer = useRestTimer(restTimerSignal, restTimerExName);
   const syncInFlightRef = React.useRef(null);
+
+  // Rede de segurança: mesmo com o deadlock do onAuthStateChange corrigido, uma conexão
+  // muito lenta ou instável não deveria conseguir deixar a tela "sincronizando" para
+  // sempre. Se a chamada não responder em 20s, desiste e mostra erro em vez de travar.
+  const withTimeout = (promise, ms = 20000) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Tempo de sincronização esgotado. Verifique sua conexão.")), ms)),
+    ]);
   // ── HYDRATION & LOADING STATE ──────────────────────────────────────────────
   const loadLocalState = () => {
     try {
@@ -444,21 +453,6 @@ export default function Home() {
         }
       }
 
-      // 4b. Sync Workout Plans (grupos criados localmente que a nuvem ainda não tem,
-      // ou grupos com exercícios adicionados enquanto offline)
-      const cloudPlans = dbData.workoutPlans || {};
-      const localPlans = syncedState.workoutPlans || {};
-      const plansDiffer = Object.keys(localPlans).some(
-        (g) => JSON.stringify(localPlans[g]) !== JSON.stringify(cloudPlans[g])
-      );
-      if (plansDiffer) {
-        try {
-          await db.saveWorkoutPlans(userId, localPlans);
-        } catch (err) {
-          console.error("Error syncing workout plans:", err);
-        }
-      }
-
       // 5. Sync Custom Exercises
       const cloudExercises = dbData.customExercises || {};
       const localCustomExercises = syncedState.customExercises || {};
@@ -491,7 +485,7 @@ export default function Home() {
     setIsSyncing(true);
     setSyncError(null);
     try {
-      const dbData = await db.fetchUserData(currUser.id);
+      const dbData = await withTimeout(db.fetchUserData(currUser.id));
       if (dbData) {
         let merged;
         setState((prev) => {
@@ -511,8 +505,8 @@ export default function Home() {
       } else {
         const currentLocal = loadLocalState();
         if (currentLocal) {
-          await db.migrateLocalData(currUser.id, currentLocal);
-          const syncedData = await db.fetchUserData(currUser.id);
+          await withTimeout(db.migrateLocalData(currUser.id, currentLocal));
+          const syncedData = await withTimeout(db.fetchUserData(currUser.id));
           if (syncedData) {
             setState((prev) => {
               const newState = mergeLocalAndCloudState(prev, syncedData);
@@ -557,12 +551,22 @@ export default function Home() {
         }
       });
 
-      // Subscribe to auth state changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Subscribe to auth state changes.
+      // IMPORTANTE: o callback NÃO pode ser async nem dar "await" direto numa cadeia
+      // pesada de chamadas ao Supabase (como handleUserSignIn → fetchUserData → várias
+      // queries). O supabase-js v2 mantém um lock interno de autenticação enquanto
+      // processa este callback; awaitar outras chamadas do Supabase de dentro dele pode
+      // travar esperando esse mesmo lock — a promise nunca resolve, e por isso a tela
+      // ficava "sincronizando" para sempre. O jeito correto (recomendado pelo próprio
+      // Supabase) é adiar esse trabalho pesado com setTimeout(0), rodando fora do
+      // callback, numa nova task.
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (session) {
           setUser(session.user);
           setIsHydrated(true);
-          if (handleUserSignInRef.current) await handleUserSignInRef.current(session.user);
+          setTimeout(() => {
+            if (handleUserSignInRef.current) handleUserSignInRef.current(session.user);
+          }, 0);
         } else {
           setUser(null);
           const updatedLocal = loadLocalState();
