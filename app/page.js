@@ -198,6 +198,7 @@ export default function Home() {
   const [restTimerSignal, fireRestTimer] = useRestTimerTrigger();
   const [restTimerExName, setRestTimerExName] = useState("");
   const restTimer = useRestTimer(restTimerSignal, restTimerExName);
+  const syncInFlightRef = React.useRef(null);
   // ── HYDRATION & LOADING STATE ──────────────────────────────────────────────
   const loadLocalState = () => {
     try {
@@ -481,6 +482,12 @@ export default function Home() {
   };
 
   const handleUserSignIn = React.useCallback(async (currUser) => {
+    // Evita rodar a sincronização inteira duas vezes em paralelo: o Supabase dispara
+    // onAuthStateChange imediatamente com a sessão atual assim que o app se inscreve nele,
+    // e getSession() também resolve por conta própria logo em seguida — sem essa trava,
+    // dois fetches concorrentes da nuvem corriam ao mesmo tempo e podiam se sobrepor.
+    if (syncInFlightRef.current === currUser.id) return;
+    syncInFlightRef.current = currUser.id;
     setIsSyncing(true);
     setSyncError(null);
     try {
@@ -521,6 +528,7 @@ export default function Home() {
     } finally {
       setIsHydrated(true);
       setIsSyncing(false);
+      syncInFlightRef.current = null;
     }
   }, []);
 
