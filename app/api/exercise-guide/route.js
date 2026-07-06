@@ -216,8 +216,15 @@ export async function GET(request) {
       .replace(/[\u0300-\u036f]/g, "");
 
   const normalizedQuery = normalize(name);
+  // IMPORTANTE: correspondência EXATA apenas (não mais por substring). Um "includes()" aqui
+  // permitia que uma chave curta e genérica (ex: "Desenvolvimento") capturasse por engano um
+  // exercício mais específico que só continha essa palavra (ex: "Desenvolvimento Militar com
+  // Barra"), entregando a imagem/conteúdo errado. Como os nomes usados no app agora batem
+  // exatamente com o banco (lib/exercises-ptbr.json), o passo 2 abaixo já resolve tudo com
+  // 100% de precisão via correspondência exata — este atalho só precisa cobrir nomes antigos
+  // exatos (de treinos salvos antes desta correção).
   const matchedKey = Object.keys(FALLBACK_EXERCISES).find(
-    (key) => normalize(key) === normalizedQuery || normalizedQuery.includes(normalize(key))
+    (key) => normalize(key) === normalizedQuery
   );
 
   if (matchedKey) {

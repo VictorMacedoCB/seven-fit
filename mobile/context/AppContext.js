@@ -30,44 +30,46 @@ export const DEFAULT_MEAL_PLAN = {
   ]
 };
 
+// IMPORTANTE: nomes auditados para dar correspondência EXATA com assets/exercises-ptbr.json
+// (mesma correção aplicada na versão web — ver app/page.js para detalhes).
 export const DEFAULT_EXERCISES = {
   Push: [
-    "Supino Reto", "Supino Inclinado", "Supino Declinado", "Crucifixo", "Crucifixo Inclinado", "Pec Deck", "Crossover",
-    "Desenvolvimento com Barra", "Desenvolvimento com Halteres", "Elevação Lateral", "Elevação Frontal", "Encolhimento", "Face Pull",
-    "Tríceps Corda", "Tríceps Testa", "Tríceps Francês", "Tríceps Banco", "Mergulho", "Extensão Tríceps"
+    "Supino Reto com Barra - Pegada Média", "Supino Inclinado com Barra - Pegada Média", "Supino Declinado com Barra",
+    "Crucifixo com Halteres", "Crucifixo Inclinado com Halteres", "Crossover na Polia",
+    "Desenvolvimento Militar com Barra", "Desenvolvimento com Halteres em Pé", "Elevação Lateral", "Elevação Frontal com Barra em Pé",
+    "Encolhimento de Ombros com Barra", "Face Pull",
+    "Tríceps Pulley com Corda", "Tríceps Testa com Barra W", "Tríceps Francês na Polia Deitado", "Mergulho no Banco",
+    "Extensão de Tríceps com Halter Unilateral", "Flexões", "Press Arnold com Halteres", "Tríceps Coice com Halter"
   ],
   Pull: [
-    "Puxada Frente", "Puxada Neutra", "Puxada Fechada", "Barra Fixa", "Pullover",
-    "Remada Curvada", "Remada Unilateral", "Remada Cavalinho", "Remada Sentado", "Serrote",
-    "Rosca Direta", "Rosca Martelo", "Rosca Concentrada", "Rosca 21", "Rosca Inversa", "Rosca Scott",
-    "Crucifixo Invertido com Halteres", "Crucifixo Invertido na Máquina", "Face Pull"
+    "Pulldown com Pegada Larga", "Puxada no Pulley com Barra V", "Pulldown Frente em Pegada Fechada", "Barra Fixa",
+    "Pullover com Halter e Braços Flexionados", "Remada Curvada com Barra", "Remada Unilateral com Halter",
+    "Remada T-Bar Deitado", "Remada Sentada no Pulley", "Rosca Direta com Barra", "Rosca Martelo", "Rosca Concentrada",
+    "Rosca Inversa com Halteres em Pé", "Rosca Scott", "Crucifixo Inverso", "Crucifixo Invertido na Máquina", "Face Pull",
+    "Levantamento Terra com Barra"
   ],
   Legs: [
-    "Agachamento Livre", "Agachamento Smith", "Agachamento Sumô", "Leg Press", "Hack Squat",
-    "Cadeira Extensora", "Mesa Flexora", "Cadeira Adutora", "Cadeira Abdutora",
-    "Stiff", "Avanço", "Avanço com Barra", "Agachamento Búlgaro",
-    "Panturrilha em Pé", "Panturrilha Sentado", "Panturrilha no Leg Press"
+    "Agachamento Livre com Barra", "Agachamento no Smith", "Agachamento Sumô com Halter", "Leg Press",
+    "Agachamento Hack com Barra", "Extensão de Pernas", "Mesa Flexora", "Cadeira Flexora", "Adutor de Coxas", "Abdutor de Coxas",
+    "Levantamento Terra com Pernas Rígidas", "Afundo com Halteres", "Afundo com Barra", "Agachamento Búlgaro Suspenso",
+    "Levantamento Terra com Barra", "Levantamento Terra Romeno", "Elevação Pélvica com Barra",
+    "Elevação de Panturrilha em Pé", "Elevação de Panturrilha Sentada", "Press de Panturrilha na Máquina de Leg Press"
   ],
   Upper: [
-    "Supino Reto", "Supino Inclinado", "Crucifixo", "Pec Deck",
-    "Desenvolvimento com Halteres", "Elevação Lateral", "Face Pull",
-    "Tríceps Corda", "Tríceps Testa",
-    "Puxada Frente", "Remada Curvada", "Remada Unilateral", "Pullover"
+    "Supino Reto com Barra - Pegada Média", "Supino Inclinado com Barra - Pegada Média", "Crucifixo com Halteres",
+    "Crossover na Polia", "Desenvolvimento com Halteres em Pé", "Elevação Lateral", "Face Pull",
+    "Tríceps Pulley com Corda", "Tríceps Testa com Barra W", "Pulldown com Pegada Larga", "Remada Curvada com Barra",
+    "Remada Unilateral com Halter", "Pullover com Halter e Braços Flexionados", "Levantamento Terra com Barra"
   ],
   Lower: [
-    "Agachamento Livre", "Leg Press", "Cadeira Extensora", "Mesa Flexora", "Stiff",
-    "Avanço", "Panturrilha em Pé", "Panturrilha Sentado",
-    "Rosca Direta", "Rosca Martelo", "Rosca Concentrada"
+    "Agachamento Livre com Barra", "Leg Press", "Extensão de Pernas", "Mesa Flexora", "Cadeira Flexora",
+    "Levantamento Terra com Pernas Rígidas", "Levantamento Terra Romeno", "Levantamento Terra com Barra", "Afundo com Halteres", "Elevação Pélvica com Barra",
+    "Elevação de Panturrilha em Pé", "Elevação de Panturrilha Sentada", "Rosca Direta com Barra", "Rosca Martelo", "Rosca Concentrada"
   ]
 };
 
-export const DEFAULT_WORKOUT_PLANS = {
-  Push: ["Supino Reto", "Supino Inclinado", "Crucifixo", "Desenvolvimento com Halteres", "Elevação Lateral", "Tríceps Corda", "Tríceps Testa"],
-  Pull: ["Puxada Frente", "Remada Curvada", "Remada Unilateral", "Pullover", "Rosca Direta", "Rosca Martelo"],
-  Legs: ["Agachamento Livre", "Leg Press", "Cadeira Extensora", "Mesa Flexora", "Stiff", "Panturrilha em Pé"],
-  Upper: ["Supino Reto", "Desenvolvimento com Halteres", "Elevação Lateral", "Puxada Frente", "Remada Curvada", "Tríceps Corda"],
-  Lower: ["Leg Press", "Stiff", "Mesa Flexora", "Cadeira Extensora", "Panturrilha em Pé", "Rosca Direta", "Rosca Martelo"],
-};
+// IMPORTANTE: propositalmente sem plano padrão pré-preenchido (ver comentário equivalente
+// em app/page.js na versão web). Cada divisão só ganha exercícios quando o usuário adiciona.
 
 export const DEFAULT_SCHEDULE = [
   { day: "Seg", type: "Push", color: "#f97316", calType: "normal", group: "Push" },
@@ -175,7 +177,7 @@ export const AppProvider = ({ children }) => {
     customFoods: [],
     customExercises: {},
     customMuscleMap: {},
-    workoutPlans: DEFAULT_WORKOUT_PLANS,
+    workoutPlans: {},
     schedule: DEFAULT_SCHEDULE,
     progressPhotos: [],
     profile: DEFAULT_PROFILE,
@@ -213,7 +215,7 @@ export const AppProvider = ({ children }) => {
           customFoods: cacheMap["co_customFoods"] || [],
           customExercises: cacheMap["co_customExercises"] || {},
           customMuscleMap: cacheMap["co_customMuscleMap"] || {},
-          workoutPlans: cacheMap["co_workoutPlans"] || DEFAULT_WORKOUT_PLANS,
+          workoutPlans: cacheMap["co_workoutPlans"] || {},
           schedule: cacheMap["co_schedule"] || DEFAULT_SCHEDULE,
           progressPhotos: cacheMap["co_progressPhotos"] || [],
           profile: cacheMap["co_profile"] || DEFAULT_PROFILE,

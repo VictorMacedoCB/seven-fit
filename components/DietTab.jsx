@@ -6,14 +6,15 @@ import { Search, Camera, Upload, Download, Trash2, Settings, Flame, X, Plus, Che
 
 // Reusable ProgressBar Component
 function ProgressBar({ val, max, color, label, unit = "" }) {
-  const pct = Math.min((val / Math.max(max, 1)) * 100, 100);
+  const isFree = !isFinite(max);
+  const pct = isFree ? 0 : Math.min((val / Math.max(max, 1)) * 100, 100);
   return (
     <div className="bar-wrap">
       <div className="row-sb" style={{ fontSize: "12px", marginBottom: "4px" }}>
         <span style={{ color: "rgba(255,255,255,0.7)" }}>{label}</span>
         <span style={{ color: "#fff" }}>
           {Math.round(val)}
-          {unit} <span style={{ color: "rgba(255,255,255,0.4)" }}>/ {max}{unit}</span>
+          {unit} <span style={{ color: "rgba(255,255,255,0.4)" }}>{isFree ? "· Livre" : `/ ${max}${unit}`}</span>
         </span>
       </div>
       <div className="bar-track">

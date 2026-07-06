@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Flame, CheckCircle2, BookOpen, History, X, Plus, Save, Zap, Droplets, Search, ChevronDown, ChevronUp, Trash2, GripVertical } from "lucide-react";
 import exercisesDb from "@/lib/exercises-ptbr.json";
 import { RestTimerBadge } from "@/components/RestTimer";
+import CreateExerciseModal from "@/components/CreateExerciseModal";
 
 
 // Sub-grupamentos musculares por tipo de treino
@@ -62,20 +63,26 @@ const MUSCLE_SUBGROUPS = {
 // Retorna o sub-músculo de um exercício dentro de um grupo
 // customMap é passado em runtime para exercícios criados pelo usuário
 function getMuscle(group, name, customMap = {}) {
-  if (customMap[name]) return customMap[name];
-  
   const normalize = (str) =>
     str
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
   const normalizedName = normalize(name);
-  
-  // Try to find in exercisesDb
-  const ex = exercisesDb.find(e => normalize(e.name) === normalizedName);
-  
-  if (ex && ex.primaryMuscles && ex.primaryMuscles.length > 0) {
-    const primary = ex.primaryMuscles[0];
+
+  // "primary" vem do banco (exercisesDb) OU, pra exercícios criados pelo usuário, do
+  // músculo escolhido na criação — guardado com o MESMO vocabulário usado no banco
+  // (ex: "triceps", "peito", "ombros"), pra passar pelas mesmas regras de agrupamento
+  // abaixo em vez de cair direto e sempre em "Outros".
+  let primary = null;
+  if (customMap[name]) {
+    primary = customMap[name];
+  } else {
+    const ex = exercisesDb.find(e => normalize(e.name) === normalizedName);
+    if (ex && ex.primaryMuscles && ex.primaryMuscles.length > 0) primary = ex.primaryMuscles[0];
+  }
+
+  if (primary) {
     const nameNorm = normalizedName;
 
     if (group === 'Lower') {
@@ -167,10 +174,17 @@ export default function WorkoutTab({
   setRestTimerExName,
   restTimer,
 }) {
-  // Planos dinâmicos: usa os que existem no workoutPlans + fallback se vazio
-  const ALL_GROUPS = workoutPlans && Object.keys(workoutPlans).length
-    ? Object.keys(workoutPlans)
-    : ["Push", "Pull", "Legs"];
+  // Divisões selecionáveis: união de (1) tudo que já existe em workoutPlans e (2) toda
+  // divisão configurada em qualquer dia da Semana (Personalizar Semana → Configurações) —
+  // cobre QUALQUER uma das divisões disponíveis lá (Push/Pull/Legs, Upper/Lower, Full Body,
+  // Torso/Limbs, Anterior/Posterior, por músculo, Complementares...), não só uma lista fixa.
+  // Isso garante que a divisão escolhida na Semana sempre apareça pra seleção manual na aba
+  // Treino, mesmo antes de ter qualquer exercício salvo nela (ex: num dia de descanso, pra
+  // treinar uma divisão diferente da programada).
+  const scheduleGroups = [...new Set((state?.schedule || []).map((d) => d.group).filter(Boolean))];
+  const planGroups = workoutPlans ? Object.keys(workoutPlans) : [];
+  const ALL_GROUPS = [...new Set([...planGroups, ...scheduleGroups])];
+  if (ALL_GROUPS.length === 0) ALL_GROUPS.push("Push", "Pull", "Legs");
 
   const [activeSubTab, setActiveSubTab] = useState("session");
   const [histWrkDate, setHistWrkDate] = useState("");
@@ -276,6 +290,7 @@ export default function WorkoutTab({
   // Busca para adicionar exercício extra
   const [showAddEx, setShowAddEx] = useState(false);
   const [exSearch, setExSearch] = useState("");
+  const [showCreateExerciseModal, setShowCreateExerciseModal] = useState(false);
   const [newExName, setNewExName] = useState("");
   const [newExGroup, setNewExGroup] = useState(null);
   const [newExMuscle, setNewExMuscle] = useState(null);
@@ -290,7 +305,11 @@ export default function WorkoutTab({
       const dow = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"][new Date().getDay()];
       const sched = state?.schedule || [];
       const todaySched = sched.find((d) => d.day === dow);
-      if (todaySched?.group && workoutPlans && Object.prototype.hasOwnProperty.call(workoutPlans, todaySched.group)) {
+      // Não exige mais que o grupo já exista em workoutPlans — antes disso, como os planos
+      // começam vazios até o usuário adicionar algo, a aba "Plano" sempre caía em "Push"
+      // em vez de respeitar o grupo programado (ex: Upper/Lower) só porque ele ainda não
+      // tinha nenhum exercício salvo.
+      if (todaySched?.group) {
         return todaySched.group;
       }
     } catch (e) { /* noop */ }
@@ -394,11 +413,11 @@ export default function WorkoutTab({
   // a menos que o usuário já tenha trocado manualmente de plano nesta sessão.
   useEffect(() => {
     if (planGroupTouchedRef.current) return;
-    if (activeGroup && workoutPlans && Object.prototype.hasOwnProperty.call(workoutPlans, activeGroup) && activeGroup !== planGroup) {
+    if (activeGroup && activeGroup !== planGroup) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPlanGroup(activeGroup);
     }
-  }, [activeGroup, workoutPlans, planGroup]);
+  }, [activeGroup, planGroup]);
 
   // Derived values for default weight training session info
   const existingWorkout = (state.workoutLogs || []).find(w => w.date === sessionDate);
@@ -890,15 +909,9 @@ export default function WorkoutTab({
                     <button
                       className="btn btn-ghost"
                       style={{ width: "100%", padding: "8px", fontSize: "12px", border: "1px dashed rgba(249,115,22,0.3)", color: "#f97316", marginTop: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
-                      onClick={() => {
-                        const newName = exSearch.trim();
-                        if (saveCustomExercise) {
-                          saveCustomExercise(activeGroup, newName, "Outros");
-                        }
-                        handleAddExToSession(newName);
-                      }}
+                      onClick={() => setShowCreateExerciseModal(true)}
                     >
-                      <Plus size={12} /> {`Criar e adicionar "${exSearch.trim()}"`}
+                      <Plus size={12} /> {`Criar "${exSearch.trim()}"`}
                     </button>
                   )}
                   <button
@@ -1869,6 +1882,19 @@ export default function WorkoutTab({
           )}
         </div>
       )}
+      <CreateExerciseModal
+        isOpen={showCreateExerciseModal}
+        initialName={exSearch.trim()}
+        onClose={() => setShowCreateExerciseModal(false)}
+        onConfirm={({ name, primary, secondary, equipment }) => {
+          if (saveCustomExercise) {
+            saveCustomExercise(activeGroup, name, primary, secondary, equipment);
+          }
+          handleAddExToSession(name);
+          setShowCreateExerciseModal(false);
+          setExSearch("");
+        }}
+      />
     </div>
   );
 }

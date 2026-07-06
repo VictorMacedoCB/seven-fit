@@ -4820,7 +4820,7 @@
     "id": "Crossover_Reverse_Lunge"
   },
   {
-    "name": "Crucifixo",
+    "name": "Crucifixo Estático (Segurar Peso)",
     "force": "static",
     "level": "iniciante",
     "mechanic": "isolado",
@@ -11546,7 +11546,7 @@
     "id": "Lying_High_Bench_Barbell_Curl"
   },
   {
-    "name": "Cadeira Flexora",
+    "name": "Mesa Flexora",
     "force": "pull",
     "level": "iniciante",
     "mechanic": "isolado",
@@ -16634,7 +16634,7 @@
     "id": "Seated_Head_Harness_Neck_Resistance"
   },
   {
-    "name": "Cadeira Flexora Sentada",
+    "name": "Cadeira Flexora",
     "force": "pull",
     "level": "iniciante",
     "mechanic": "isolado",

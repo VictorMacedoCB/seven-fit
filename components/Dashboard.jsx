@@ -5,9 +5,10 @@ import { Scale, Flame, Calendar, Dumbbell } from "lucide-react";
 
 // Reusable MacroRing Component
 function MacroRing({ val, max, color, size, stroke, label }) {
+  const isFree = !isFinite(max);
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
-  const dash = Math.min(val / Math.max(max, 1), 1) * circ;
+  const dash = isFree ? 0 : Math.min(val / Math.max(max, 1), 1) * circ;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
@@ -37,7 +38,7 @@ function MacroRing({ val, max, color, size, stroke, label }) {
           {Math.round(val)}
         </div>
         <div style={{ fontSize: `${size * 0.13}px`, color: "rgba(255,255,255,0.5)" }}>
-          /{max}
+          {isFree ? "Livre" : `/${max}`}
         </div>
       </div>
       <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)", fontWeight: "600", marginTop: `${size * 0.6}px` }}>
@@ -49,14 +50,15 @@ function MacroRing({ val, max, color, size, stroke, label }) {
 
 // Reusable ProgressBar Component
 function ProgressBar({ val, max, color, label, unit = "" }) {
-  const pct = Math.min((val / Math.max(max, 1)) * 100, 100);
+  const isFree = !isFinite(max);
+  const pct = isFree ? 0 : Math.min((val / Math.max(max, 1)) * 100, 100);
   return (
     <div className="bar-wrap">
       <div className="row-sb" style={{ fontSize: "12px", marginBottom: "4px" }}>
         <span style={{ color: "rgba(255,255,255,0.7)" }}>{label}</span>
         <span style={{ color: "#fff" }}>
           {Math.round(val)}
-          {unit} <span style={{ color: "rgba(255,255,255,0.4)" }}>/ {max}{unit}</span>
+          {unit} <span style={{ color: "rgba(255,255,255,0.4)" }}>{isFree ? "· Livre" : `/ ${max}${unit}`}</span>
         </span>
       </div>
       <div className="bar-track">

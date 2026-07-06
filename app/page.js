@@ -50,57 +50,69 @@ const DEFAULT_MEAL_PLAN = {
   ]
 };
 // Biblioteca completa por grupamento (para selecionar ao montar o plano)
+// IMPORTANTE: os nomes abaixo foram auditados um a um contra lib/exercises-ptbr.json para
+// que cada um resolva por CORRESPONDÊNCIA EXATA (não por aproximação) ao exercício certo —
+// com a imagem e instrução corretas. Antes, nomes genéricos como "Supino Reto" ou "Agachamento
+// Livre" não existiam de forma exata no banco (que usa nomes mais específicos, ex: "Supino Reto
+// com Barra - Pegada Média"), então caíam no algoritmo de aproximação e várias vezes acertavam o
+// exercício errado (ex: "Tríceps Corda" caía em "Pular Corda", "Cadeira Extensora" caía em
+// "Cadeira Flexora"). Também estavam faltando vários exercícios simples e básicos, como o
+// Levantamento Terra tradicional — foram adicionados. Se for alterar/adicionar um nome aqui,
+// confira antes que ele existe EXATAMENTE (mesmas letras/acentos) em lib/exercises-ptbr.json.
 const DEFAULT_EXERCISES = {
   // PUSH — Peito + Ombro + Tríceps
   Push: [
-    "Supino Reto", "Supino Inclinado", "Supino Declinado", "Crucifixo", "Crucifixo Inclinado", "Pec Deck", "Crossover",
-    "Desenvolvimento com Barra", "Desenvolvimento com Halteres", "Elevação Lateral", "Elevação Frontal", "Encolhimento", "Face Pull",
-    "Tríceps Corda", "Tríceps Testa", "Tríceps Francês", "Tríceps Banco", "Mergulho", "Extensão Tríceps"
+    "Supino Reto com Barra - Pegada Média", "Supino Inclinado com Barra - Pegada Média", "Supino Declinado com Barra",
+    "Crucifixo com Halteres", "Crucifixo Inclinado com Halteres", "Crossover na Polia",
+    "Desenvolvimento Militar com Barra", "Desenvolvimento com Halteres em Pé", "Elevação Lateral", "Elevação Frontal com Barra em Pé",
+    "Encolhimento de Ombros com Barra", "Face Pull",
+    "Tríceps Pulley com Corda", "Tríceps Testa com Barra W", "Tríceps Francês na Polia Deitado", "Mergulho no Banco",
+    "Extensão de Tríceps com Halter Unilateral", "Flexões", "Press Arnold com Halteres", "Tríceps Coice com Halter"
   ],
   // PULL — Costas + Bíceps + Posterior de Ombro
   Pull: [
-    "Puxada Frente", "Puxada Neutra", "Puxada Fechada", "Barra Fixa", "Pullover",
-    "Remada Curvada", "Remada Unilateral", "Remada Cavalinho", "Remada Sentado", "Serrote",
-    "Rosca Direta", "Rosca Martelo", "Rosca Concentrada", "Rosca 21", "Rosca Inversa", "Rosca Scott",
-    "Crucifixo Invertido com Halteres", "Crucifixo Invertido na Máquina", "Face Pull"
+    "Pulldown com Pegada Larga", "Puxada no Pulley com Barra V", "Pulldown Frente em Pegada Fechada", "Barra Fixa",
+    "Pullover com Halter e Braços Flexionados", "Remada Curvada com Barra", "Remada Unilateral com Halter",
+    "Remada T-Bar Deitado", "Remada Sentada no Pulley", "Rosca Direta com Barra", "Rosca Martelo", "Rosca Concentrada",
+    "Rosca Inversa com Halteres em Pé", "Rosca Scott", "Crucifixo Inverso", "Crucifixo Invertido na Máquina", "Face Pull",
+    "Levantamento Terra com Barra"
   ],
   // LEGS — Pernas completo
   Legs: [
-    "Agachamento Livre", "Agachamento Smith", "Agachamento Sumô", "Leg Press", "Hack Squat",
-    "Cadeira Extensora", "Mesa Flexora", "Cadeira Adutora", "Cadeira Abdutora",
-    "Stiff", "Avanço", "Avanço com Barra", "Agachamento Búlgaro",
-    "Panturrilha em Pé", "Panturrilha Sentado", "Panturrilha no Leg Press"
+    "Agachamento Livre com Barra", "Agachamento no Smith", "Agachamento Sumô com Halter", "Leg Press",
+    "Agachamento Hack com Barra", "Extensão de Pernas", "Mesa Flexora", "Cadeira Flexora", "Adutor de Coxas", "Abdutor de Coxas",
+    "Levantamento Terra com Pernas Rígidas", "Afundo com Halteres", "Afundo com Barra", "Agachamento Búlgaro Suspenso",
+    "Levantamento Terra com Barra", "Levantamento Terra Romeno", "Elevação Pélvica com Barra",
+    "Elevação de Panturrilha em Pé", "Elevação de Panturrilha Sentada", "Press de Panturrilha na Máquina de Leg Press"
   ],
   // UPPER — Peito + Ombro + Tríceps + Costas
   Upper: [
-    "Supino Reto", "Supino Inclinado", "Crucifixo", "Pec Deck",
-    "Desenvolvimento com Halteres", "Elevação Lateral", "Face Pull",
-    "Tríceps Corda", "Tríceps Testa",
-    "Puxada Frente", "Remada Curvada", "Remada Unilateral", "Pullover"
+    "Supino Reto com Barra - Pegada Média", "Supino Inclinado com Barra - Pegada Média", "Crucifixo com Halteres",
+    "Crossover na Polia", "Desenvolvimento com Halteres em Pé", "Elevação Lateral", "Face Pull",
+    "Tríceps Pulley com Corda", "Tríceps Testa com Barra W", "Pulldown com Pegada Larga", "Remada Curvada com Barra",
+    "Remada Unilateral com Halter", "Pullover com Halter e Braços Flexionados", "Levantamento Terra com Barra"
   ],
   // LOWER — Pernas + Bíceps
   Lower: [
-    "Agachamento Livre", "Leg Press", "Cadeira Extensora", "Mesa Flexora", "Stiff",
-    "Avanço", "Panturrilha em Pé", "Panturrilha Sentado",
-    "Rosca Direta", "Rosca Martelo", "Rosca Concentrada"
+    "Agachamento Livre com Barra", "Leg Press", "Extensão de Pernas", "Mesa Flexora", "Cadeira Flexora",
+    "Levantamento Terra com Pernas Rígidas", "Levantamento Terra Romeno", "Levantamento Terra com Barra", "Afundo com Halteres", "Elevação Pélvica com Barra",
+    "Elevação de Panturrilha em Pé", "Elevação de Panturrilha Sentada", "Rosca Direta com Barra", "Rosca Martelo", "Rosca Concentrada"
   ],
   // COMPLEMENTARES — Abdômen + Panturrilha + Lombar (dia dedicado, separado do treino principal)
   Complementares: [
-    "Prancha", "Abdominal na Polia", "Abdominal Infra", "Elevação de Pernas", "Roda Abdominal",
-    "Abdominal Bicicleta", "Abdominal Oblíquo",
-    "Panturrilha em Pé", "Panturrilha Sentado", "Panturrilha no Leg Press",
-    "Hiperextensão Lombar"
+    "Prancha", "Abdominal na Polia", "Abdominal Infra na Polia", "Elevação de Pernas na Barra", "Roda Abdominal",
+    "Abdominal Inverso", "Abdominais Oblíquos",
+    "Elevação de Panturrilha em Pé", "Elevação de Panturrilha Sentada", "Press de Panturrilha na Máquina de Leg Press",
+    "Hiperextensões (Extensões Lombares)"
   ]
 };
 
-// Plano padrão de exercícios por treino (o usuário pode personalizar)
-const DEFAULT_WORKOUT_PLANS = {
-  Push: ["Supino Reto", "Supino Inclinado", "Crucifixo", "Desenvolvimento com Halteres", "Elevação Lateral", "Tríceps Corda", "Tríceps Testa"],
-  Pull: ["Puxada Frente", "Remada Curvada", "Remada Unilateral", "Pullover", "Rosca Direta", "Rosca Martelo"],
-  Legs: ["Agachamento Livre", "Leg Press", "Cadeira Extensora", "Mesa Flexora", "Stiff", "Panturrilha em Pé"],
-  Upper: ["Supino Reto", "Desenvolvimento com Halteres", "Elevação Lateral", "Puxada Frente", "Remada Curvada", "Tríceps Corda"],
-  Lower: ["Leg Press", "Stiff", "Mesa Flexora", "Cadeira Extensora", "Panturrilha em Pé", "Rosca Direta", "Rosca Martelo"],
-};
+// IMPORTANTE: propositalmente NÃO existe um "plano padrão" com exercícios pré-definidos.
+// Cada divisão (Push/Pull/Legs/Upper/Lower/qualquer nome customizado) começa vazia e só
+// ganha exercícios quando o próprio usuário os adiciona — na aba "Plano" ou direto numa
+// sessão de treino. Isso é intencional: um plano "pré-preenchido" reaparecia sozinho
+// mesmo depois de o usuário apagá-lo (porque o preenchimento automático era reaplicado
+// a cada renderização), então a exclusão de divisões parecia não funcionar.
 const DEFAULT_SCHEDULE = [
   { day: "Seg", type: "Push", color: "#f97316", calType: "normal", group: "Push" },
   { day: "Ter", type: "Pull", color: "#3b82f6", calType: "normal", group: "Pull" },
@@ -172,7 +184,8 @@ export default function Home() {
     customFoods: [],
     customExercises: {},
     customMuscleMap: {}, // { [exerciseName]: muscle } para exercícios criados pelo usuário
-    workoutPlans: DEFAULT_WORKOUT_PLANS,
+    customExerciseMeta: {}, // { [exerciseName]: { secondary, equipment } } dados extras do exercício customizado
+    workoutPlans: {},
     schedule: DEFAULT_SCHEDULE,
     progressPhotos: [],
     // Session state
@@ -203,7 +216,7 @@ export default function Home() {
   // Rede de segurança: mesmo com o deadlock do onAuthStateChange corrigido, uma conexão
   // muito lenta ou instável não deveria conseguir deixar a tela "sincronizando" para
   // sempre. Se a chamada não responder em 20s, desiste e mostra erro em vez de travar.
-  const withTimeout = (promise, ms = 20000) =>
+  const withTimeout = (promise, ms = 30000) =>
     Promise.race([
       promise,
       new Promise((_, reject) => setTimeout(() => reject(new Error("Tempo de sincronização esgotado. Verifique sua conexão.")), ms)),
@@ -227,6 +240,7 @@ export default function Home() {
 
       const workoutPlansRaw = localStorage.getItem("co_workoutPlans");
       const customMuscleMapRaw = localStorage.getItem("co_customMuscleMap");
+      const customExerciseMetaRaw = localStorage.getItem("co_customExerciseMeta");
       return {
         foodLogs: (foodLogs && JSON.parse(foodLogs)) || [],
         workoutLogs: (workoutLogs && JSON.parse(workoutLogs)) || [],
@@ -234,7 +248,11 @@ export default function Home() {
         customFoods: (customFoods && JSON.parse(customFoods)) || [],
         customExercises: (customExercises && JSON.parse(customExercises)) || {},
         customMuscleMap: (customMuscleMapRaw && JSON.parse(customMuscleMapRaw)) || {},
-        workoutPlans: (workoutPlansRaw && JSON.parse(workoutPlansRaw)) || DEFAULT_WORKOUT_PLANS,
+        customExerciseMeta: (customExerciseMetaRaw && JSON.parse(customExerciseMetaRaw)) || {},
+        // Nenhum preenchimento automático aqui: o que o usuário salvou é exatamente o que
+        // volta. Uma divisão que ele nunca configurou (ou que ele excluiu) simplesmente não
+        // existe como chave — e é tratada como lista vazia em todo o resto do app.
+        workoutPlans: (workoutPlansRaw && JSON.parse(workoutPlansRaw)) || {},
         schedule: (parsedSchedule && parsedSchedule.length === 7) ? parsedSchedule : DEFAULT_SCHEDULE,
         progressPhotos: (progressPhotos && JSON.parse(progressPhotos)) || [],
         selectedFood: null,
@@ -255,7 +273,8 @@ export default function Home() {
       localStorage.setItem("co_customFoods", JSON.stringify(data.customFoods || []));
       localStorage.setItem("co_customExercises", JSON.stringify(data.customExercises || {}));
       localStorage.setItem("co_customMuscleMap", JSON.stringify(data.customMuscleMap || {}));
-      localStorage.setItem("co_workoutPlans", JSON.stringify(data.workoutPlans || DEFAULT_WORKOUT_PLANS));
+      localStorage.setItem("co_customExerciseMeta", JSON.stringify(data.customExerciseMeta || {}));
+      localStorage.setItem("co_workoutPlans", JSON.stringify(data.workoutPlans || {}));
       localStorage.setItem("co_schedule", JSON.stringify((data.schedule && data.schedule.length === 7) ? data.schedule : DEFAULT_SCHEDULE));
       localStorage.setItem("co_progressPhotos", JSON.stringify(data.progressPhotos || []));
       localStorage.setItem("co_profile", JSON.stringify(data.profile || DEFAULT_PROFILE));
@@ -353,13 +372,15 @@ export default function Home() {
       customMuscleMap: mergedCustomMuscleMap,
       progressPhotos: mergedProgressPhotos,
       schedule: (cloudData.schedule && cloudData.schedule.length === 7) ? cloudData.schedule : localState.schedule,
-      // Planos de treino: mescla por grupo. A nuvem é a fonte da verdade pros grupos que
-      // já foram sincronizados (evita reviver uma lista antiga só porque ela ainda está
-      // em cache local), mas mantém grupos que só existem localmente (ex: criados agora
-      // mesmo, offline, e ainda não enviados).
-      workoutPlans: (cloudData.workoutPlans && Object.keys(cloudData.workoutPlans).length)
-        ? { ...(localState.workoutPlans || {}), ...cloudData.workoutPlans }
-        : localState.workoutPlans,
+      // Planos de treino: mescla por grupo, sem nenhum preenchimento automático — o que
+      // não existir aqui simplesmente não existe (divisão vazia até o usuário adicionar
+      // algo). A nuvem é a fonte da verdade pros grupos que já foram sincronizados (evita
+      // reviver uma lista antiga só porque ela ainda está em cache local), mas mantém
+      // grupos que só existem localmente (ex: criados agora mesmo, offline).
+      workoutPlans: {
+        ...(localState.workoutPlans || {}),
+        ...((cloudData.workoutPlans && Object.keys(cloudData.workoutPlans).length) ? cloudData.workoutPlans : {}),
+      },
       profile: cloudData.profile ? { ...localState.profile, ...cloudData.profile } : localState.profile,
       mealPlan: cloudData.mealPlan || localState.mealPlan,
       selectedFood: null
@@ -692,7 +713,7 @@ export default function Home() {
     return s.calType === "heavy"
       ? targets.heavy
       : s.calType === "free"
-      ? { kcal: 9999, protein: 0, carbs: 0, fat: 0 }
+      ? { kcal: Infinity, protein: Infinity, carbs: Infinity, fat: Infinity }
       : targets.normal;
   };
 
@@ -788,11 +809,28 @@ export default function Home() {
       return groups.includes(group);
     }).map(ex => ex.name);
 
+    // Exercícios customizados: aparecem no grupo em que foram criados E em qualquer outro
+    // grupo compatível com o músculo primário escolhido na criação (mesma lógica dos
+    // exercícios do banco) — assim, um exercício de tríceps criado manualmente aparece
+    // tanto em Push quanto em Upper, por exemplo, em vez de ficar preso a um único grupo.
+    const customMuscleMap = state.customMuscleMap || {};
+    const allCustomNames = new Set();
+    Object.values(state.customExercises || {}).forEach(names => (names || []).forEach(n => allCustomNames.add(n)));
+    const customExercisesForGroup = [...allCustomNames].filter(name => {
+      if ((state.customExercises[group] || []).includes(name)) return true;
+      const primary = customMuscleMap[name];
+      if (!primary) return false;
+      const nameNorm = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const bucket = muscleBucket(primary, nameNorm);
+      if (!bucket) return false;
+      return (BUCKET_GROUPS[bucket] || []).includes(group);
+    });
+
     return [
       ...new Set([
         ...(DEFAULT_EXERCISES[group] || []),
         ...dbExercises,
-        ...((state.customExercises && state.customExercises[group]) || []),
+        ...customExercisesForGroup,
       ]),
     ].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   };
@@ -1294,9 +1332,9 @@ export default function Home() {
     }
   };
 
-  const saveCustomExercise = async (group, name, muscle = null) => {
+  const saveCustomExercise = async (group, name, primaryMuscle = null, secondaryMuscle = null, equipment = null) => {
     if (!group || !name) return;
-    
+
     const updatedCustomExs = { ...state.customExercises };
     if (!updatedCustomExs[group]) {
       updatedCustomExs[group] = [];
@@ -1306,14 +1344,23 @@ export default function Home() {
     }
 
     const updatedCustomMuscleMap = { ...state.customMuscleMap };
-    if (muscle) {
-      updatedCustomMuscleMap[name] = muscle;
+    if (primaryMuscle) {
+      updatedCustomMuscleMap[name] = primaryMuscle;
+    }
+
+    // Metadados extras (músculo secundário + equipamento) — usados no guia do exercício
+    // e em telas futuras. Guardados à parte pra não mudar o formato de customMuscleMap,
+    // que outras partes do app (getMuscle, muscleBucket) esperam como string simples.
+    const updatedCustomExerciseMeta = { ...(state.customExerciseMeta || {}) };
+    if (secondaryMuscle || equipment) {
+      updatedCustomExerciseMeta[name] = { secondary: secondaryMuscle || null, equipment: equipment || null };
     }
 
     const updated = {
       ...state,
       customExercises: updatedCustomExs,
-      customMuscleMap: updatedCustomMuscleMap
+      customMuscleMap: updatedCustomMuscleMap,
+      customExerciseMeta: updatedCustomExerciseMeta,
     };
     saveState(updated);
 
@@ -1558,7 +1605,7 @@ export default function Home() {
                   removeWorkoutLog={removeWorkoutLog}
                   getExercises={getExercises}
                   saveCustomExercise={saveCustomExercise}
-                  workoutPlans={state.workoutPlans || DEFAULT_WORKOUT_PLANS}
+                  workoutPlans={state.workoutPlans || {}}
                   saveWorkoutPlan={saveWorkoutPlan}
                   deleteWorkoutPlan={deleteWorkoutPlan}
                   DEFAULT_EXERCISES={DEFAULT_EXERCISES}
