@@ -190,109 +190,172 @@ export function useRestTimer(autoStartSignal, exerciseName) {
  * ficava sobreposto ao botão flutuante do Coach de IA, que ocupa o mesmo canto.
  * O componente pai precisa ter `position: relative` para o badge se ancorar nele.
  */
-export function RestTimerBadge({ timer }) {
+export function RestTimerBadge({ timer, inline = false }) {
   const {
-    duration, secondsLeft, running, expanded, exName,
+    duration, secondsLeft, running, expanded,
+    setExpanded,
+  } = timer;
+
+  const mm = Math.floor(secondsLeft / 60).toString().padStart(2, "0");
+  const ss = (secondsLeft % 60).toString().padStart(2, "0");
+
+  const button = (
+    <button
+      onClick={() => setExpanded(true)}
+      aria-label="Abrir cronômetro de descanso"
+      style={{
+        display: "flex", alignItems: "center", gap: "6px",
+        padding: "6px 11px", borderRadius: "999px",
+        border: `1px solid ${running ? "rgba(249,115,22,0.5)" : "rgba(255,255,255,0.14)"}`,
+        background: "rgba(10,10,16,0.55)",
+        backdropFilter: "blur(6px)",
+        cursor: "pointer", flexShrink: 0,
+      }}
+    >
+      <Timer size={13} style={{ color: running ? "#f97316" : "rgba(255,255,255,0.55)" }} />
+      <span className="syne" style={{ fontSize: 13, fontWeight: 800, color: running ? "#fff" : "rgba(255,255,255,0.6)", fontVariantNumeric: "tabular-nums" }}>
+        {mm}:{ss}
+      </span>
+    </button>
+  );
+
+  if (inline) {
+    return (
+      <>
+        {button}
+        {expanded && <RestTimerModal timer={timer} />}
+      </>
+    );
+  }
+
+  return (
+    <div style={{ position: "absolute", top: "14px", right: "16px", zIndex: 20 }}>
+      {button}
+      {expanded && <RestTimerModal timer={timer} />}
+    </div>
+  );
+}
+
+/**
+ * Modal próprio do cronômetro de descanso: relógio grande centralizado, com o botão de
+ * play/pause centralizado logo abaixo e os ajustes de -15s / +15s um de cada lado dele.
+ */
+function RestTimerModal({ timer }) {
+  const {
+    duration, secondsLeft, running, exName,
     setExpanded, play, pause, adjust, resetToDuration, selectPreset, isDone,
   } = timer;
 
   const mm = Math.floor(secondsLeft / 60).toString().padStart(2, "0");
   const ss = (secondsLeft % 60).toString().padStart(2, "0");
   const pct = duration > 0 ? Math.max(0, Math.min(100, (secondsLeft / duration) * 100)) : 0;
+  const size = 200, stroke = 10;
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = (pct / 100) * circ;
 
   return (
-    <div style={{ position: "absolute", top: "14px", right: "16px", zIndex: 20 }}>
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        aria-label={expanded ? "Fechar cronômetro de descanso" : "Abrir cronômetro de descanso"}
-        style={{
-          display: "flex", alignItems: "center", gap: "6px",
-          padding: "6px 11px", borderRadius: "999px",
-          border: `1px solid ${running ? "rgba(249,115,22,0.5)" : "rgba(255,255,255,0.14)"}`,
-          background: "rgba(10,10,16,0.55)",
-          backdropFilter: "blur(6px)",
-          cursor: "pointer",
-        }}
-      >
-        <Timer size={13} style={{ color: running ? "#f97316" : "rgba(255,255,255,0.55)" }} />
-        <span className="syne" style={{ fontSize: 13, fontWeight: 800, color: running ? "#fff" : "rgba(255,255,255,0.6)", fontVariantNumeric: "tabular-nums" }}>
-          {mm}:{ss}
-        </span>
-      </button>
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) setExpanded(false); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 900,
+        background: "rgba(0,0,0,0.85)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "16px",
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: "340px",
+        background: "linear-gradient(170deg,#15151f,#0c0c14)",
+        border: `1px solid ${isDone ? "rgba(16,185,129,0.4)" : "rgba(249,115,22,0.35)"}`,
+        borderRadius: 24,
+        padding: "20px 22px 24px",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)" }}>
+            {isDone ? "Descanso concluído!" : running ? `Descansando${exName ? " · " + exName : ""}` : "Cronômetro de descanso"}
+          </span>
+          <button onClick={() => setExpanded(false)} title="Fechar (continua rodando se estiver ativo)"
+            style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 10, width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.6)" }}>
+            <X size={14} />
+          </button>
+        </div>
 
-      {expanded && (
-        <div
-          style={{
-            position: "absolute", top: "calc(100% + 8px)", right: 0,
-            width: "min(88vw, 300px)",
-            background: "linear-gradient(135deg, rgba(20,20,28,0.98) 0%, rgba(10,10,16,0.99) 100%)",
-            border: `1px solid ${isDone ? "rgba(16,185,129,0.5)" : "rgba(249,115,22,0.4)"}`,
-            borderRadius: 16,
-            padding: "12px 14px",
-            boxShadow: "0 10px 40px rgba(0,0,0,0.55)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {isDone ? "Descanso concluído!" : running ? `Descansando${exName ? " · " + exName : ""}` : "Cronômetro de descanso"}
-            </span>
-            <button onClick={() => setExpanded(false)} title="Fechar (continua rodando se estiver ativo)"
-              style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.4)", padding: 2 }}>
-              <X size={14} />
-            </button>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div className="syne" style={{ fontSize: 24, fontWeight: 800, color: isDone ? "#10b981" : "#fff", minWidth: 62, fontVariantNumeric: "tabular-nums" }}>
-              {mm}:{ss}
+        {/* Relógio centralizado */}
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 22 }}>
+          <div style={{ position: "relative", width: size, height: size }}>
+            <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+              <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+              <circle
+                cx={size / 2} cy={size / 2} r={r} fill="none"
+                stroke={isDone ? "#10b981" : "#f97316"} strokeWidth={stroke}
+                strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+                style={{ transition: "stroke-dasharray 1s linear" }}
+              />
+            </svg>
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span className="syne" style={{ fontSize: 40, fontWeight: 800, color: isDone ? "#10b981" : "#fff", fontVariantNumeric: "tabular-nums" }}>
+                {mm}:{ss}
+              </span>
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ height: 5, borderRadius: 4, background: "rgba(255,255,255,0.08)", overflow: "hidden", marginBottom: 7 }}>
-                <div style={{ height: "100%", width: `${pct}%`, background: isDone ? "#10b981" : "#f97316", transition: "width 1s linear" }} />
-              </div>
-              <div style={{ display: "flex", gap: 5 }}>
-                <button onClick={() => adjust(-15)} style={btnStyle()} title="-15s"><Minus size={12} /></button>
-                <button
-                  onClick={() => { secondsLeft === 0 ? resetToDuration() : (running ? pause() : play()); }}
-                  style={{ ...btnStyle(), flex: 1, background: "#f97316", color: "#fff" }}
-                >
-                  {secondsLeft === 0 ? "Reiniciar" : running ? <Pause size={12} /> : <Play size={12} />}
-                </button>
-                <button onClick={() => adjust(15)} style={btnStyle()} title="+15s"><Plus size={12} /></button>
-                <button onClick={resetToDuration} style={btnStyle()} title="Reiniciar"><RotateCcw size={12} /></button>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 5, marginTop: 9 }}>
-            {PRESETS.map((p) => (
-              <button
-                key={p}
-                onClick={() => selectPreset(p)}
-                style={{
-                  flex: 1, padding: "5px 0", borderRadius: 7,
-                  border: "1px solid " + (duration === p ? "rgba(249,115,22,0.5)" : "rgba(255,255,255,0.08)"),
-                  background: duration === p ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.03)",
-                  color: duration === p ? "#f97316" : "rgba(255,255,255,0.5)",
-                  fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                }}
-              >
-                {p}s
-              </button>
-            ))}
           </div>
         </div>
-      )}
+
+        {/* Play/pause centralizado, com -15s / +15s dos lados */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 18 }}>
+          <button onClick={() => adjust(-15)} style={sideBtnStyle()} title="-15s">
+            <Minus size={16} />
+            <span style={{ fontSize: 9, fontWeight: 700 }}>15s</span>
+          </button>
+          <button
+            onClick={() => { secondsLeft === 0 ? resetToDuration() : (running ? pause() : play()); }}
+            style={{
+              width: 66, height: 66, borderRadius: "50%", border: "none", cursor: "pointer",
+              background: isDone ? "#10b981" : "#f97316", color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: `0 6px 20px ${isDone ? "rgba(16,185,129,0.4)" : "rgba(249,115,22,0.4)"}`,
+            }}
+            aria-label={secondsLeft === 0 ? "Reiniciar" : running ? "Pausar" : "Iniciar"}
+          >
+            {secondsLeft === 0 ? <RotateCcw size={24} /> : running ? <Pause size={24} /> : <Play size={26} style={{ marginLeft: 3 }} />}
+          </button>
+          <button onClick={() => adjust(15)} style={sideBtnStyle()} title="+15s">
+            <Plus size={16} />
+            <span style={{ fontSize: 9, fontWeight: 700 }}>15s</span>
+          </button>
+        </div>
+
+        {/* Presets de duração */}
+        <div style={{ display: "flex", gap: 6 }}>
+          {PRESETS.map((p) => (
+            <button
+              key={p}
+              onClick={() => selectPreset(p)}
+              style={{
+                flex: 1, padding: "8px 0", borderRadius: 9,
+                border: "1px solid " + (duration === p ? "rgba(249,115,22,0.5)" : "rgba(255,255,255,0.08)"),
+                background: duration === p ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.03)",
+                color: duration === p ? "#f97316" : "rgba(255,255,255,0.5)",
+                fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+              }}
+            >
+              {p}s
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
-function btnStyle() {
+function sideBtnStyle() {
   return {
-    height: 28, minWidth: 28, borderRadius: 7,
-    border: "1px solid rgba(255,255,255,0.08)",
+    width: 44, height: 44, borderRadius: "50%",
+    border: "1px solid rgba(255,255,255,0.1)",
     background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.7)",
-    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1,
+    cursor: "pointer",
   };
 }
 

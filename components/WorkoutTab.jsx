@@ -216,6 +216,8 @@ export default function WorkoutTab({
   // a sessão continua ativa e o cronômetro continua contando; um botão "Continuar sessão"
   // reabre o mesmo modal exatamente de onde parou.
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
+  // Resumo mostrado depois de encerrar/salvar o treino (null = nenhum resumo pra mostrar)
+  const [workoutSummary, setWorkoutSummary] = useState(null);
   // Cronômetro de duração da sessão — baseado em timestamp de início (não num contador
   // que decrementa), então continua certo mesmo se o app for pra segundo plano.
   const [sessionStartedAt, setSessionStartedAt] = useState(() => {
@@ -760,12 +762,31 @@ export default function WorkoutTab({
     // Treino" chama essa mesma função, o usuário ficava travado sem conseguir fechar.
     // Agora sempre limpa a sessão e fecha o modal, com ou sem dados pra salvar.
     if (finalExs.length > 0) {
-      const volume = finalExs
-        .filter(ex => !ex.isCardio && !ex.isMetadata)
+      const realExs = finalExs.filter(ex => !ex.isCardio && !ex.isMetadata);
+      const volume = realExs
         .reduce((tot, ex) =>
           tot + ex.sets.filter((x) => x.type === "valida").reduce((a, x) => a + x.weight * x.reps, 0), 0);
 
       saveSessionWorkout({ date: sessionDate, type: s.type, exercises: finalExs, notes: sessionNotes, volume });
+
+      // Monta o resumo pra mostrar depois de fechar — captura os números antes de
+      // resetar a sessão logo abaixo.
+      const totalSets = realExs.reduce((tot, ex) => tot + ex.sets.filter((x) => x.type === "valida").length, 0);
+      const totalKcal = finalExs.reduce((acc, ex) => (ex.isCardio || ex.isMetadata) ? acc + (ex.kcal || 0) : acc, 0);
+      setWorkoutSummary({
+        type: s.type,
+        group: activeGroup,
+        date: sessionDate,
+        durationSeconds: sessionElapsed,
+        volume,
+        exerciseCount: realExs.length,
+        setCount: totalSets,
+        kcal: totalKcal,
+        exercises: realExs.map((ex) => ({
+          name: ex.name,
+          sets: ex.sets.filter((x) => x.type === "valida"),
+        })),
+      });
     }
 
     setSessionExs(activeGroup ? (workoutPlans[activeGroup] || []).map((n) => ({ name: n, sets: [] })) : []);
@@ -943,6 +964,7 @@ export default function WorkoutTab({
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  {restTimer && <RestTimerBadge timer={restTimer} inline />}
                   <button
                     onClick={handleSaveWorkout}
                     className="btn-danger"
@@ -1727,6 +1749,75 @@ export default function WorkoutTab({
               </div>
             </div>
           )}
+
+          {/* Resumo do treino — aparece depois de encerrar/salvar */}
+          {workoutSummary && (
+            <div
+              onClick={(e) => { if (e.target === e.currentTarget) setWorkoutSummary(null); }}
+              style={{
+                position: "fixed", inset: 0, zIndex: 850,
+                background: "rgba(0,0,0,0.85)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: "16px",
+              }}
+            >
+              <div style={{
+                width: "100%", maxWidth: "420px", maxHeight: "88dvh",
+                background: "linear-gradient(170deg,#15151f,#0c0c14)",
+                border: "1px solid rgba(16,185,129,0.3)",
+                borderRadius: "24px", overflow: "hidden",
+                display: "flex", flexDirection: "column",
+              }}>
+                <div style={{ padding: "24px 20px 16px", textAlign: "center", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                  <div style={{ width: 52, height: 52, borderRadius: "50%", background: "rgba(16,185,129,0.15)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px" }}>
+                    <CheckCircle2 size={26} style={{ color: "#10b981" }} />
+                  </div>
+                  <div className="syne" style={{ fontSize: "19px", fontWeight: 800, color: "#fff", marginBottom: "2px" }}>Treino Concluído!</div>
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)" }}>
+                    {workoutSummary.group || workoutSummary.type} · {fmtDate(workoutSummary.date)}
+                  </div>
+                </div>
+
+                <div style={{ overflowY: "auto", flex: 1, padding: "16px 20px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", marginBottom: "18px" }}>
+                    {[
+                      { label: "Duração", value: `${String(Math.floor(workoutSummary.durationSeconds / 60)).padStart(2, "0")}:${String(workoutSummary.durationSeconds % 60).padStart(2, "0")}` },
+                      { label: "Volume", value: `${Math.round(workoutSummary.volume)}kg` },
+                      { label: "Exercícios", value: workoutSummary.exerciseCount },
+                      { label: "Séries", value: workoutSummary.setCount },
+                    ].map((s2) => (
+                      <div key={s2.label} style={{ textAlign: "center", background: "rgba(255,255,255,0.03)", borderRadius: "12px", padding: "10px 4px" }}>
+                        <div className="syne" style={{ fontSize: "15px", fontWeight: 800, color: "#f97316" }}>{s2.value}</div>
+                        <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: ".5px", marginTop: "2px" }}>{s2.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: ".7px", marginBottom: "8px" }}>
+                    Exercícios
+                  </div>
+                  {workoutSummary.exercises.map((ex, i) => (
+                    <div key={i} style={{ padding: "10px 0", borderBottom: i < workoutSummary.exercises.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff", marginBottom: "4px" }}>{ex.name}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        {ex.sets.map((set, j) => (
+                          <span key={j} style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "999px", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)" }}>
+                            {set.weight}kg × {set.reps}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ padding: "14px 20px", flexShrink: 0, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                  <button className="btn btn-primary" style={{ width: "100%", padding: 13, fontSize: 14, fontWeight: 700 }} onClick={() => setWorkoutSummary(null)}>
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1894,42 +1985,51 @@ export default function WorkoutTab({
                       );
                     })
                   ) : (
-                    // Agrupado por músculo quando sem filtro
+                    // Agrupado por músculo quando sem filtro. Usa um Set pra rastrear o que já
+                    // foi mostrado — assim, com o banco inteiro liberado (873 exercícios), nada
+                    // fica invisível só porque o rótulo de músculo não bate com um cabeçalho
+                    // pré-definido; qualquer sobra cai no "Outros" no final, garantido.
                     <>
-                      {Object.entries(MUSCLE_SUBGROUPS[planGroup] || {}).map(([muscle, musclExs]) => {
-                        const available = allForGroup.filter((e) => getMuscle(planGroup, e, customMuscleMap) === muscle);
-                        if (!available.length) return null;
-                        return (
-                          <div key={muscle} style={{ marginBottom: "12px" }}>
-                            <div style={{ fontSize: "10px", fontWeight: "800", color: "#f97316", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: "6px", paddingLeft: "2px" }}>{muscle}</div>
-                            {available.map((name) => {
-                              const inPlan = planExercises.includes(name);
-                              return (
-                                <div key={name} onClick={() => !inPlan && addToPlan(name)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 10px", borderRadius: "10px", cursor: inPlan ? "default" : "pointer", marginBottom: "2px", background: inPlan ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)", opacity: inPlan ? 0.6 : 1 }}>
-                                  <span style={{ fontSize: "13px" }}>{name}</span>
-                                  {inPlan ? <CheckCircle2 size={13} style={{ color: "#10b981" }} /> : <Plus size={13} style={{ color: "#f97316" }} />}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
                       {(() => {
-                        const outros = allForGroup.filter((e) => getMuscle(planGroup, e, customMuscleMap) === "Outros");
-                        if (!outros.length) return null;
+                        const rendered = new Set();
+                        const sections = Object.keys(MUSCLE_SUBGROUPS[planGroup] || {}).map((muscle) => {
+                          const available = allForGroup.filter((e) => getMuscle(planGroup, e, customMuscleMap) === muscle);
+                          available.forEach((e) => rendered.add(e));
+                          if (!available.length) return null;
+                          return (
+                            <div key={muscle} style={{ marginBottom: "12px" }}>
+                              <div style={{ fontSize: "10px", fontWeight: "800", color: "#f97316", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: "6px", paddingLeft: "2px" }}>{muscle}</div>
+                              {available.map((name) => {
+                                const inPlan = planExercises.includes(name);
+                                return (
+                                  <div key={name} onClick={() => !inPlan && addToPlan(name)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 10px", borderRadius: "10px", cursor: inPlan ? "default" : "pointer", marginBottom: "2px", background: inPlan ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)", opacity: inPlan ? 0.6 : 1 }}>
+                                    <span style={{ fontSize: "13px" }}>{name}</span>
+                                    {inPlan ? <CheckCircle2 size={13} style={{ color: "#10b981" }} /> : <Plus size={13} style={{ color: "#f97316" }} />}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        });
+                        const outros = allForGroup.filter((e) => !rendered.has(e));
                         return (
-                          <div key="Outros" style={{ marginBottom: "12px" }}>
-                            <div style={{ fontSize: "10px", fontWeight: "800", color: "#f97316", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: "6px", paddingLeft: "2px" }}>Outros</div>
-                            {outros.map((name) => {
-                              const inPlan = planExercises.includes(name);
-                              return (
-                                <div key={name} onClick={() => !inPlan && addToPlan(name)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 10px", borderRadius: "10px", cursor: inPlan ? "default" : "pointer", marginBottom: "2px", background: inPlan ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)", opacity: inPlan ? 0.6 : 1 }}>
-                                  <span style={{ fontSize: "13px" }}>{name}</span>
-                                  {inPlan ? <CheckCircle2 size={13} style={{ color: "#10b981" }} /> : <Plus size={13} style={{ color: "#f97316" }} />}
-                                </div>
-                              );
-                            })}
-                          </div>
+                          <>
+                            {sections}
+                            {outros.length > 0 && (
+                              <div key="Outros" style={{ marginBottom: "12px" }}>
+                                <div style={{ fontSize: "10px", fontWeight: "800", color: "#f97316", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: "6px", paddingLeft: "2px" }}>Outros</div>
+                                {outros.map((name) => {
+                                  const inPlan = planExercises.includes(name);
+                                  return (
+                                    <div key={name} onClick={() => !inPlan && addToPlan(name)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 10px", borderRadius: "10px", cursor: inPlan ? "default" : "pointer", marginBottom: "2px", background: inPlan ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)", opacity: inPlan ? 0.6 : 1 }}>
+                                      <span style={{ fontSize: "13px" }}>{name}</span>
+                                      {inPlan ? <CheckCircle2 size={13} style={{ color: "#10b981" }} /> : <Plus size={13} style={{ color: "#f97316" }} />}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </>
                         );
                       })()}
                     </>

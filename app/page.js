@@ -743,94 +743,32 @@ export default function Home() {
     return [...ALL_DEFAULT_FOODS, ...(state.customFoods || [])];
   };
 
-  // Mapeia o músculo primário (+ nome do exercício, pra distinguir deltoide posterior)
-  // de um exercício da base pra um "bucket" canônico de músculo.
-  const muscleBucket = (primary, nameNorm) => {
-    if (!primary) return null;
-    if (primary === 'ombros') {
-      const isRearDelt = nameNorm.includes('invertido') ||
-                         nameNorm.includes('inverso') ||
-                         nameNorm.includes('posterior') ||
-                         nameNorm.includes('rear delt') ||
-                         nameNorm.includes('face pull');
-      return isRearDelt ? 'ombro-posterior' : 'ombro';
-    }
-    const map = {
-      peito: 'peito',
-      triceps: 'triceps',
-      trapezio: 'trapezio',
-      dorsais: 'costas',
-      'meio-das-costas': 'costas',
-      'inferior-das-costas': 'lombar',
-      biceps: 'biceps',
-      antebracos: 'biceps',
-      pescoco: 'costas',
-      quadriceps: 'quad',
-      isquiotibiais: 'posterior-perna',
-      gluteos: 'posterior-perna',
-      panturrilhas: 'panturrilha',
-      adutores: 'adutor',
-      abdutores: 'adutor',
-      abdominais: 'abdomen',
-    };
-    return map[primary] || null;
-  };
-
-  // Pra cada "bucket" de músculo, quais divisões/planos de treino ele deve aparecer.
-  // Isso substitui a lista antiga que só cobria Push/Pull/Legs/Upper/Lower — qualquer
-  // divisão nova adicionada em EditDayModal (Torso, Limbs, Full Body, Anterior,
-  // Posterior, splits por músculo, etc.) precisa só ganhar uma entrada aqui.
-  const FULL_BODY_GROUPS = ['Full Body', 'Full Body A', 'Full Body B'];
-  const BUCKET_GROUPS = {
-    'peito':            ['Push', 'Upper', 'Torso', 'Anterior', 'Peito', ...FULL_BODY_GROUPS],
-    'triceps':          ['Push', 'Upper', 'Limbs', 'Posterior', 'Braços', 'Peito', ...FULL_BODY_GROUPS],
-    'trapezio':         ['Push', 'Upper', 'Torso', 'Ombro', ...FULL_BODY_GROUPS],
-    'ombro':            ['Push', 'Upper', 'Torso', 'Anterior', 'Ombro', ...FULL_BODY_GROUPS],
-    'ombro-posterior':  ['Pull', 'Upper', 'Torso', 'Posterior', 'Ombro', ...FULL_BODY_GROUPS],
-    'costas':           ['Pull', 'Upper', 'Torso', 'Posterior', 'Costas', ...FULL_BODY_GROUPS],
-    'lombar':           ['Pull', 'Upper', 'Torso', 'Posterior', 'Costas', 'Complementares', 'Core', ...FULL_BODY_GROUPS],
-    'biceps':           ['Pull', 'Upper', 'Lower', 'Limbs', 'Anterior', 'Braços', 'Costas', ...FULL_BODY_GROUPS],
-    'quad':             ['Legs', 'Lower', 'Limbs', 'Anterior', 'Quad', ...FULL_BODY_GROUPS],
-    'posterior-perna':  ['Legs', 'Lower', 'Limbs', 'Posterior', 'Pernas', ...FULL_BODY_GROUPS],
-    'panturrilha':      ['Legs', 'Lower', 'Limbs', 'Posterior', 'Complementares', 'Pernas', ...FULL_BODY_GROUPS],
-    'adutor':           ['Legs', 'Lower', 'Limbs', 'Anterior', 'Quad', 'Pernas', ...FULL_BODY_GROUPS],
-    'abdomen':          ['Legs', 'Lower', 'Torso', 'Anterior', 'Core', 'Complementares', ...FULL_BODY_GROUPS],
-  };
+  // Removido o antigo sistema de "bucket" por músculo (que restringia quais exercícios
+  // apareciam em cada divisão, ex: só peito em Push). Sempre tinha brechas — cada músculo
+  // esquecido de algum grupo virava um "exercício sumiu" diferente (ex: trapézio faltando
+  // em Pull). Agora getExercises() simplesmente libera o banco inteiro em qualquer divisão.
 
   const getExercises = (group) => {
     if (!group) return [];
 
-    const dbExercises = exercisesDb.filter(ex => {
-      const primary = ex.primaryMuscles?.[0];
-      const nameNorm = ex.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      const bucket = muscleBucket(primary, nameNorm);
-      if (!bucket) return false;
-      const groups = BUCKET_GROUPS[bucket] || [];
-      return groups.includes(group);
-    }).map(ex => ex.name);
+    // Todo o banco de exercícios fica disponível em qualquer divisão — sem filtro por
+    // "esse músculo só aparece nesse tipo de dia". Um sistema de categorização por
+    // músculo/bucket parecia mais organizado, mas na prática sempre tinha brechas (ex:
+    // trapézio não aparecia em Pull, levantamento terra não aparecia em Legs) e cada
+    // brecha virava um "exercício sumiu" diferente. Mais simples e à prova de brecha:
+    // o usuário vê e pode escolher qualquer exercício do banco em qualquer treino.
+    const dbExercises = exercisesDb.map(ex => ex.name);
 
-    // Exercícios customizados: aparecem no grupo em que foram criados E em qualquer outro
-    // grupo compatível com o músculo primário escolhido na criação (mesma lógica dos
-    // exercícios do banco) — assim, um exercício de tríceps criado manualmente aparece
-    // tanto em Push quanto em Upper, por exemplo, em vez de ficar preso a um único grupo.
-    const customMuscleMap = state.customMuscleMap || {};
+    // Exercícios customizados: todos ficam disponíveis em qualquer divisão também, pelo
+    // mesmo motivo.
     const allCustomNames = new Set();
     Object.values(state.customExercises || {}).forEach(names => (names || []).forEach(n => allCustomNames.add(n)));
-    const customExercisesForGroup = [...allCustomNames].filter(name => {
-      if ((state.customExercises[group] || []).includes(name)) return true;
-      const primary = customMuscleMap[name];
-      if (!primary) return false;
-      const nameNorm = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      const bucket = muscleBucket(primary, nameNorm);
-      if (!bucket) return false;
-      return (BUCKET_GROUPS[bucket] || []).includes(group);
-    });
 
     return [
       ...new Set([
         ...(DEFAULT_EXERCISES[group] || []),
         ...dbExercises,
-        ...customExercisesForGroup,
+        ...allCustomNames,
       ]),
     ].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   };
@@ -1350,7 +1288,7 @@ export default function Home() {
 
     // Metadados extras (músculo secundário + equipamento) — usados no guia do exercício
     // e em telas futuras. Guardados à parte pra não mudar o formato de customMuscleMap,
-    // que outras partes do app (getMuscle, muscleBucket) esperam como string simples.
+    // que outras partes do app (getMuscle) esperam como string simples.
     const updatedCustomExerciseMeta = { ...(state.customExerciseMeta || {}) };
     if (secondaryMuscle || equipment) {
       updatedCustomExerciseMeta[name] = { secondary: secondaryMuscle || null, equipment: equipment || null };
