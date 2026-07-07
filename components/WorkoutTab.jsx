@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Flame, CheckCircle2, BookOpen, History, X, Plus, Save, Zap, Droplets, Search, ChevronDown, ChevronUp, Trash2, GripVertical } from "lucide-react";
+import { Flame, CheckCircle2, BookOpen, History, X, Plus, Save, Zap, Droplets, Search, ChevronDown, ChevronUp, Trash2, GripVertical, Edit, Calendar } from "lucide-react";
 import exercisesDb from "@/lib/exercises-ptbr.json";
 import { RestTimerBadge } from "@/components/RestTimer";
 import CreateExerciseModal from "@/components/CreateExerciseModal";
@@ -173,6 +173,7 @@ export default function WorkoutTab({
   fireRestTimer,
   setRestTimerExName,
   restTimer,
+  openEditDayModal,
 }) {
   // Divisões selecionáveis: união de (1) tudo que já existe em workoutPlans e (2) toda
   // divisão configurada em qualquer dia da Semana (Personalizar Semana → Configurações) —
@@ -209,6 +210,57 @@ export default function WorkoutTab({
     }
     return false;
   });
+
+  // Modal da sessão: "Iniciar Sessão" abre o modal de registro (exercícios/séries/cargas).
+  // Fechar o modal (X) NÃO encerra a sessão nem zera o cronômetro — só esconde a tela,
+  // a sessão continua ativa e o cronômetro continua contando; um botão "Continuar sessão"
+  // reabre o mesmo modal exatamente de onde parou.
+  const [sessionModalOpen, setSessionModalOpen] = useState(false);
+  // Cronômetro de duração da sessão — baseado em timestamp de início (não num contador
+  // que decrementa), então continua certo mesmo se o app for pra segundo plano.
+  const [sessionStartedAt, setSessionStartedAt] = useState(() => {
+    if (typeof window !== "undefined") {
+      const raw = localStorage.getItem("co_active_sessionStartedAt");
+      return raw ? parseInt(raw, 10) : null;
+    }
+    return null;
+  });
+  const [sessionElapsed, setSessionElapsed] = useState(0);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!sessionStartedAt) { setSessionElapsed(0); return; }
+    const tick = () => setSessionElapsed(Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [sessionStartedAt]);
+
+  // Recalcula na hora ao voltar de segundo plano, em vez de esperar o próximo tick.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && sessionStartedAt) {
+        setSessionElapsed(Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 1000)));
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [sessionStartedAt]);
+
+  const startSession = () => {
+    if (!sessionStartedAt) {
+      const now = Date.now();
+      setSessionStartedAt(now);
+      if (typeof window !== "undefined") localStorage.setItem("co_active_sessionStartedAt", String(now));
+    }
+    setSessionModalOpen(true);
+  };
+
+  const endSessionTimer = () => {
+    setSessionStartedAt(null);
+    if (typeof window !== "undefined") localStorage.removeItem("co_active_sessionStartedAt");
+  };
 
   // Sessão: lista de exercícios com sets
   const [sessionExs, setSessionExs] = useState(() => {
@@ -680,7 +732,7 @@ export default function WorkoutTab({
 
   const handleSaveWorkout = () => {
     const finalExs = sessionExs.filter((ex) => ex.sets.length > 0);
-    
+
     const wDur = parseInt(displayDuration);
     const wKcal = parseInt(displayKcal);
     if (finalExs.length > 0 && wDur > 0) {
@@ -691,7 +743,7 @@ export default function WorkoutTab({
         kcal: wKcal
       });
     }
-    
+
     cardios.forEach(c => {
       finalExs.push({
         name: `Cardio (${c.type})`,
@@ -703,14 +755,19 @@ export default function WorkoutTab({
       });
     });
 
-    if (!finalExs.length) return;
+    // Ao encerrar o treino, salva o que tiver sido registrado (se houver). Antes, sem
+    // nenhuma série válida essa função simplesmente não fazia nada — e como "Encerrar
+    // Treino" chama essa mesma função, o usuário ficava travado sem conseguir fechar.
+    // Agora sempre limpa a sessão e fecha o modal, com ou sem dados pra salvar.
+    if (finalExs.length > 0) {
+      const volume = finalExs
+        .filter(ex => !ex.isCardio && !ex.isMetadata)
+        .reduce((tot, ex) =>
+          tot + ex.sets.filter((x) => x.type === "valida").reduce((a, x) => a + x.weight * x.reps, 0), 0);
 
-    const volume = finalExs
-      .filter(ex => !ex.isCardio && !ex.isMetadata)
-      .reduce((tot, ex) =>
-        tot + ex.sets.filter((x) => x.type === "valida").reduce((a, x) => a + x.weight * x.reps, 0), 0);
+      saveSessionWorkout({ date: sessionDate, type: s.type, exercises: finalExs, notes: sessionNotes, volume });
+    }
 
-    saveSessionWorkout({ date: sessionDate, type: s.type, exercises: finalExs, notes: sessionNotes, volume });
     setSessionExs(activeGroup ? (workoutPlans[activeGroup] || []).map((n) => ({ name: n, sets: [] })) : []);
     setSessionNotes("");
     setSessionStarted(false);
@@ -719,6 +776,8 @@ export default function WorkoutTab({
     setWeightKcal("360");
     setCardios([]);
     setShowCardioForm(false);
+    endSessionTimer();
+    setSessionModalOpen(false);
   };
 
   const resetSession = () => {
@@ -771,7 +830,7 @@ export default function WorkoutTab({
 
       {/* Sub-tabs */}
       <div className="sub-tabs" style={{ marginBottom: "14px" }}>
-        {[{ id: "session", label: "Sessão" }, { id: "plan", label: "Plano" }, { id: "history", label: "Histórico" }].map((t) => (
+        {[{ id: "session", label: "Sessão" }, { id: "plan", label: "Plano" }, { id: "semana", label: "Semana" }, { id: "history", label: "Histórico" }].map((t) => (
           <button key={t.id} className={`sub-tab ${activeSubTab === t.id ? "active" : ""}`} onClick={() => setActiveSubTab(t.id)}>{t.label}</button>
         ))}
       </div>
@@ -779,6 +838,129 @@ export default function WorkoutTab({
       {/* ─────────── SESSÃO ─────────── */}
       {activeSubTab === "session" && (
         <div>
+          {(() => {
+            const hasActiveSession = sessionStarted || !!sessionStartedAt;
+            const mm = String(Math.floor(sessionElapsed / 60)).padStart(2, "0");
+            const ss = String(sessionElapsed % 60).padStart(2, "0");
+            // Nome do treino de hoje = o grupo/plano que realmente vai abrir na sessão
+            // (o mesmo que aparece na aba Plano), não um rótulo separado que poderia
+            // ter sido editado de forma diferente no Personalizar Semana.
+            const todayPlanLabel = activeGroup || s.type || "Treino de hoje";
+            return (
+              <div className="card" style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "16px 18px", marginBottom: "14px",
+                border: hasActiveSession ? "1px solid rgba(16,185,129,0.35)" : "1px solid rgba(255,255,255,0.08)",
+                background: hasActiveSession ? "linear-gradient(135deg, rgba(16,185,129,0.1), rgba(255,255,255,0.02))" : undefined,
+              }}>
+                <div>
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", marginBottom: "2px" }}>
+                    {hasActiveSession ? "Treino em andamento" : `Hoje: ${todayPlanLabel}`}
+                  </div>
+                  <div className="syne" style={{ fontSize: hasActiveSession ? "26px" : "16px", fontWeight: "800", color: "#fff", fontVariantNumeric: "tabular-nums" }}>
+                    {hasActiveSession ? `${mm}:${ss}` : "Pronto pra treinar?"}
+                  </div>
+                </div>
+                <button
+                  className="btn btn-primary"
+                  style={{ padding: "12px 20px", fontSize: "13px", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}
+                  onClick={() => {
+                    if (!hasActiveSession) startSession(); else { if (!sessionStartedAt) startSession(); else setSessionModalOpen(true); }
+                  }}
+                >
+                  {hasActiveSession ? "Continuar Treino" : "Iniciar Treino"}
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* Último treino desta divisão — visível direto na aba (sem precisar abrir o
+              modal), pra dar uma olhada rápida no que foi feito da última vez antes de
+              decidir iniciar. Só aparece fora de uma sessão ativa, pra não poluir a tela
+              enquanto o usuário já está treinando. */}
+          {!sessionStarted && !sessionStartedAt && (() => {
+            if (!activeGroup) return null;
+            const planNames = new Set(workoutPlans[activeGroup] || []);
+            const logs = [...(state?.workoutLogs || [])]
+              .filter((w) => w.date !== sessionDate)
+              .sort((a, b) => (a.date < b.date ? 1 : -1));
+            const last = logs.find((w) => (w.exercises || []).some((ex) => !ex.isCardio && !ex.isMetadata && planNames.has(ex.name)));
+            if (!last) return null;
+            const realExs = (last.exercises || []).filter((ex) => !ex.isCardio && !ex.isMetadata);
+            return (
+              <div className="card" style={{ marginBottom: "14px" }}>
+                <div className="row-sb" style={{ marginBottom: "8px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "rgba(255,255,255,0.55)" }}>
+                    Último treino de {activeGroup} · {fmtDate(last.date)}
+                  </span>
+                  <span className="small">Vol: {last.volume}kg</span>
+                </div>
+                {realExs.map((ex, i) => {
+                  const validSets = (ex.sets || []).filter((x) => x.type === "valida");
+                  const bestSet = validSets[validSets.length - 1];
+                  return (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", padding: "4px 0", color: "rgba(255,255,255,0.7)" }}>
+                      <span>{ex.name}</span>
+                      {bestSet && <span style={{ color: "#f97316", fontWeight: 700 }}>{bestSet.weight}kg × {bestSet.reps}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* Modal de registro: exercícios, séries e cargas. Fechar (X) não encerra a sessão
+              nem o cronômetro — só volta pro cartão "Continuar Sessão" acima; tudo o que foi
+              registrado continua salvo e o cronômetro segue contando normalmente.
+              Tamanho fixo tipo "tela de celular" mesmo no desktop — em telas grandes ele NÃO
+              esticava e ficava gigante, então agora fica centralizado com largura máxima. */}
+          {sessionModalOpen && (
+            <div
+              onClick={(e) => { if (e.target === e.currentTarget) setSessionModalOpen(false); }}
+              style={{
+                position: "fixed", inset: 0, zIndex: 800,
+                background: "rgba(0,0,0,0.85)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: "16px",
+              }}
+            >
+              <div style={{
+                width: "100%", maxWidth: "460px", height: "min(860px, 92dvh)",
+                background: "#0a0a0f", borderRadius: "24px",
+                border: "1px solid rgba(255,255,255,0.08)",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+                display: "flex", flexDirection: "column", overflow: "hidden",
+              }}>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "14px 16px 12px",
+                borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0,
+              }}>
+                <div>
+                  <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.45)" }}>Treino em andamento</div>
+                  <div className="syne" style={{ fontSize: "18px", fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums" }}>
+                    {String(Math.floor(sessionElapsed / 60)).padStart(2, "0")}:{String(sessionElapsed % 60).padStart(2, "0")}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <button
+                    onClick={handleSaveWorkout}
+                    className="btn-danger"
+                    style={{ padding: "8px 12px", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px" }}
+                    title="Salva o treino registrado e encerra"
+                  >
+                    Encerrar Treino
+                  </button>
+                  <button
+                    onClick={() => setSessionModalOpen(false)}
+                    style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 10, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff", flexShrink: 0 }}
+                    aria-label="Fechar (o treino continua ativo)"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px 16px 24px" }}>
           {/* Date + group */}
           <div style={{ display: "flex", gap: "8px", marginBottom: "12px", minWidth: 0 }}>
             <input type="date" value={sessionDate} max={today()} onChange={(e) => { setSessionDate(e.target.value || today()); setSessionStarted(false); }}
@@ -878,7 +1060,15 @@ export default function WorkoutTab({
                       style={{ paddingLeft: "32px", fontSize: "12px" }}
                     />
                   </div>
-                  <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+                  {(() => {
+                    const filtered = getExercises(activeGroup).filter(name => !exSearch || name.toLowerCase().includes(exSearch.toLowerCase()));
+                    return (
+                      <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginBottom: "6px" }}>
+                        {filtered.length} exercício{filtered.length === 1 ? "" : "s"} encontrado{filtered.length === 1 ? "" : "s"}{!exSearch && " — role a lista pra ver todos"}
+                      </div>
+                    );
+                  })()}
+                  <div style={{ maxHeight: "340px", overflowY: "auto" }}>
                     {getExercises(activeGroup)
                       .filter(name => !exSearch || name.toLowerCase().includes(exSearch.toLowerCase()))
                       .map(name => {
@@ -1533,6 +1723,10 @@ export default function WorkoutTab({
               </div>
             );
           })()}
+              </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1797,6 +1991,50 @@ export default function WorkoutTab({
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────────── SEMANA ─────────── */}
+      {activeSubTab === "semana" && (
+        <div>
+          <div className="card">
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+              <Calendar size={15} style={{ color: "#f97316" }} />
+              <div className="syne" style={{ fontSize: "15px", fontWeight: "700" }}>Personalizar Semana</div>
+            </div>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", marginBottom: "14px" }}>
+              A divisão de cada dia aqui é o que abre automaticamente na aba Sessão.
+            </div>
+            {(state?.schedule || []).map((day, index) => {
+              const calText =
+                day.calType === "free" ? "Livre" : day.calType === "heavy" ? "Pesado (2800 kcal)" : "Normal (2600 kcal)";
+              return (
+                <div
+                  key={day.day}
+                  style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "12px 0",
+                    borderBottom: index < (state.schedule.length - 1) ? "1px solid rgba(255,255,255,0.05)" : "none",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                    <span style={{ fontSize: "12px", color: day.color, fontWeight: "700", width: "28px" }}>{day.day}</span>
+                    <div>
+                      <div style={{ fontSize: "14px", fontWeight: "500" }}>{day.type}</div>
+                      <div className="small">{calText}</div>
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ padding: "6px 14px", fontSize: "13px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                    onClick={() => openEditDayModal && openEditDayModal(index)}
+                  >
+                    <Edit size={14} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

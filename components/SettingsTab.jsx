@@ -198,21 +198,6 @@ export default function SettingsTab({
 
   return (
     <div>
-      {/* TABS INTERNAS */}
-      <div style={{ display:"flex", gap:6, marginBottom:16, background:"rgba(255,255,255,0.04)", borderRadius:14, padding:4 }}>
-        {[
-          { id:"perfil",  label:"Perfil & Metas" },
-          { id:"semana",  label:"Personalizar Semana" },
-        ].map(t => (
-          <button key={t.id} onClick={()=>setSettingsTab(t.id)} style={{
-            flex:1, padding:"9px 8px", borderRadius:10, border:"none", cursor:"pointer",
-            fontSize:12, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
-            background: settingsTab===t.id ? "#f97316" : "none",
-            color: settingsTab===t.id ? "#fff" : "rgba(255,255,255,0.45)",
-            transition:"all 0.18s",
-          }}>{t.label}</button>
-        ))}
-      </div>
 
       {settingsTab === "perfil" && <>
       {/* SYNC ERROR BANNER */}
@@ -601,59 +586,6 @@ export default function SettingsTab({
       </div>
       </> }
 
-      {settingsTab === "semana" && <>
-      {/* WEEK SCHEDULE LIST */}
-      <div className="card">
-        <div className="syne" style={{ fontSize: "15px", fontWeight: "700", marginBottom: "16px" }}>
-          Personalizar Semana
-        </div>
-        {(state.schedule || []).map((day, index) => {
-          const calText =
-            day.calType === "free"
-              ? "Livre"
-              : day.calType === "heavy"
-              ? "Pesado (2800 kcal)"
-              : "Normal (2600 kcal)";
-
-          return (
-            <div
-              key={day.day}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "12px 0",
-                borderBottom: index < 6 ? "1px solid rgba(255,255,255,0.05)" : "none",
-              }}
-            >
-              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <span
-                  style={{
-                    fontSize: "12px",
-                    color: day.color,
-                    fontWeight: "700",
-                    width: "28px",
-                  }}
-                >
-                  {day.day}
-                </span>
-                <div>
-                  <div style={{ fontSize: "14px", fontWeight: "500" }}>{day.type}</div>
-                  <div className="small">{calText}</div>
-                </div>
-              </div>
-              <button
-                className="btn btn-ghost"
-                style={{ padding: "6px 14px", fontSize: "13px", display: "flex", alignItems: "center", justifyContent: "center" }}
-                onClick={() => openEditDayModal(index)}
-              >
-                <Edit size={14} />
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      </> }
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes spin { to { transform: rotate(360deg); } }
       `}} />

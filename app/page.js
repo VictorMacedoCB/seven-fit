@@ -1620,6 +1620,7 @@ export default function Home() {
                   fireRestTimer={fireRestTimer}
                   setRestTimerExName={setRestTimerExName}
                   restTimer={restTimer}
+                  openEditDayModal={openEditDayModal}
                 />
               )}
               {activeTab === "progress" && (
