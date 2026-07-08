@@ -212,6 +212,11 @@ export default function Home() {
   const [restTimerExName, setRestTimerExName] = useState("");
   const restTimer = useRestTimer(restTimerSignal, restTimerExName);
   const syncInFlightRef = React.useRef(null);
+  // Sempre aponta pro state mais recente — necessário porque handleUserSignIn é um
+  // useCallback com dependências vazias (closure fixa) mas precisa checar o state atual
+  // de forma síncrona antes de decidir se confia numa resposta "vazia" da nuvem.
+  const prevStateRef = React.useRef(state);
+  useEffect(() => { prevStateRef.current = state; }, [state]);
 
   // Rede de segurança: mesmo com o deadlock do onAuthStateChange corrigido, uma conexão
   // muito lenta ou instável não deveria conseguir deixar a tela "sincronizando" para
@@ -508,20 +513,70 @@ export default function Home() {
     try {
       const dbData = await withTimeout(db.fetchUserData(currUser.id));
       if (dbData) {
-        let merged;
-        setState((prev) => {
-          merged = mergeLocalAndCloudState(prev, dbData);
-          cacheToLocal(merged);
-          return merged;
-        });
+        // Rede de segurança: se a nuvem voltou praticamente vazia (não é erro — só zero
+        // linhas, o que pode acontecer por uma falha passageira, ex: a query rodando um
+        // instante antes da sessão de autenticação estar totalmente propagada) enquanto
+        // o dispositivo já tem dados reais salvos localmente, isso é suspeito demais pra
+        // confiar. Sem essa checagem, esse tipo de resposta vazia sobrescrevia dados de
+        // verdade — exatamente o "às vezes sincroniza e apaga tudo" relatado.
+        const cloudLooksEmpty =
+          (dbData.foodLogs || []).length === 0 &&
+          (dbData.workoutLogs || []).length === 0 &&
+          (dbData.weightLogs || []).length === 0 &&
+          (dbData.customFoods || []).length === 0 &&
+          (dbData.schedule || []).length === 0;
+        const localHasRealData =
+          (prevStateRef.current.foodLogs || []).length > 0 ||
+          (prevStateRef.current.workoutLogs || []).length > 0 ||
+          (prevStateRef.current.weightLogs || []).length > 0;
 
-        // Trigger background sync
-        try {
-          const syncedState = await syncUnsyncedDataToCloud(currUser.id, merged, dbData);
-          setState(syncedState);
-          cacheToLocal(syncedState);
-        } catch (syncErr) {
-          console.error("Failed background sync:", syncErr);
+        if (cloudLooksEmpty && localHasRealData) {
+          console.warn("Cloud fetch veio vazio mas há dados locais reais — tentando de novo antes de confiar.");
+          // Uma segunda tentativa geralmente resolve problemas de timing passageiros.
+          const retryData = await withTimeout(db.fetchUserData(currUser.id)).catch(() => null);
+          const retryLooksEmpty = !retryData || (
+            (retryData.foodLogs || []).length === 0 &&
+            (retryData.workoutLogs || []).length === 0 &&
+            (retryData.weightLogs || []).length === 0 &&
+            (retryData.customFoods || []).length === 0 &&
+            (retryData.schedule || []).length === 0
+          );
+          if (retryLooksEmpty) {
+            // Ainda vazio depois de tentar de novo: mantém os dados locais como estão e
+            // não sincroniza nada agora — mais seguro que apagar algo que pode ser real.
+            console.warn("Nuvem continua vazia após nova tentativa — mantendo dados locais intactos por segurança.");
+            setSyncError("Não foi possível confirmar os dados na nuvem com segurança. Seus dados locais foram mantidos.");
+          } else {
+            let merged;
+            setState((prev) => {
+              merged = mergeLocalAndCloudState(prev, retryData);
+              cacheToLocal(merged);
+              return merged;
+            });
+            try {
+              const syncedState = await syncUnsyncedDataToCloud(currUser.id, merged, retryData);
+              setState(syncedState);
+              cacheToLocal(syncedState);
+            } catch (syncErr) {
+              console.error("Failed background sync:", syncErr);
+            }
+          }
+        } else {
+          let merged;
+          setState((prev) => {
+            merged = mergeLocalAndCloudState(prev, dbData);
+            cacheToLocal(merged);
+            return merged;
+          });
+
+          // Trigger background sync
+          try {
+            const syncedState = await syncUnsyncedDataToCloud(currUser.id, merged, dbData);
+            setState(syncedState);
+            cacheToLocal(syncedState);
+          } catch (syncErr) {
+            console.error("Failed background sync:", syncErr);
+          }
         }
       } else {
         const currentLocal = loadLocalState();
