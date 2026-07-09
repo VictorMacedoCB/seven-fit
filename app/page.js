@@ -616,26 +616,25 @@ export default function Home() {
     if (local) setState((prev) => ({ ...prev, ...local }));
 
     if (supabase) {
-      // Get initial session
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          setUser(session.user);
-          setIsHydrated(true);
-          if (handleUserSignInRef.current) handleUserSignInRef.current(session.user);
-        } else {
-          setIsHydrated(true);
-        }
-      });
+      // IMPORTANTE: só existe UM caminho que dispara a sincronização agora — o
+      // onAuthStateChange abaixo. Antes também tinha um getSession().then(...) separado
+      // chamando a mesma sincronização — como o onAuthStateChange já dispara sozinho com
+      // a sessão atual assim que o app se inscreve nele (evento "INITIAL_SESSION"), os
+      // dois juntos causavam duas sincronizações completas rodando em sequência, cada
+      // uma com uma "foto" da nuvem tirada em momento ligeiramente diferente — e a
+      // segunda podia usar dados mais antigos que os que a primeira acabara de escrever,
+      // revertendo trabalho recente. Isso é exatamente o padrão recomendado pelo próprio
+      // Supabase: usar só o onAuthStateChange pro carregamento inicial.
 
       // Subscribe to auth state changes.
-      // IMPORTANTE: o callback NÃO pode ser async nem dar "await" direto numa cadeia
-      // pesada de chamadas ao Supabase (como handleUserSignIn → fetchUserData → várias
-      // queries). O supabase-js v2 mantém um lock interno de autenticação enquanto
-      // processa este callback; awaitar outras chamadas do Supabase de dentro dele pode
-      // travar esperando esse mesmo lock — a promise nunca resolve, e por isso a tela
-      // ficava "sincronizando" para sempre. O jeito correto (recomendado pelo próprio
-      // Supabase) é adiar esse trabalho pesado com setTimeout(0), rodando fora do
-      // callback, numa nova task.
+      // O callback NÃO pode ser async nem dar "await" direto numa cadeia pesada de
+      // chamadas ao Supabase (como handleUserSignIn → fetchUserData → várias queries).
+      // O supabase-js v2 mantém um lock interno de autenticação enquanto processa este
+      // callback; awaitar outras chamadas do Supabase de dentro dele pode travar
+      // esperando esse mesmo lock — a promise nunca resolve, e por isso a tela ficava
+      // "sincronizando" para sempre. O jeito correto (recomendado pelo próprio Supabase)
+      // é adiar esse trabalho pesado com setTimeout(0), rodando fora do callback, numa
+      // nova task.
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (session) {
           setUser(session.user);
