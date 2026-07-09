@@ -918,11 +918,18 @@ export default function WorkoutTab({
                 </div>
                 {realExs.map((ex, i) => {
                   const validSets = (ex.sets || []).filter((x) => x.type === "valida");
-                  const bestSet = validSets[validSets.length - 1];
                   return (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", padding: "4px 0", color: "rgba(255,255,255,0.7)" }}>
-                      <span>{ex.name}</span>
-                      {bestSet && <span style={{ color: "#f97316", fontWeight: 700 }}>{bestSet.weight}kg × {bestSet.reps}</span>}
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", fontSize: "12px", padding: "4px 0", color: "rgba(255,255,255,0.7)", gap: "10px" }}>
+                      <span style={{ flexShrink: 0 }}>{ex.name}</span>
+                      {validSets.length > 0 && (
+                        <span style={{ display: "flex", flexWrap: "wrap", gap: "4px", justifyContent: "flex-end" }}>
+                          {validSets.map((set, j) => (
+                            <span key={j} style={{ color: "#f97316", fontWeight: 700, whiteSpace: "nowrap" }}>
+                              {set.weight}kg×{set.reps}{j < validSets.length - 1 ? "," : ""}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                     </div>
                   );
                 })}

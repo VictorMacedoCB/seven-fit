@@ -91,7 +91,7 @@ const PRESET_COLORS = [
 export default function EditDayModal({ isOpen, onClose, dayIndex, schedule, saveDayEdit, COLORS }) {
   const [typeName,       setTypeName]       = useState("");
   const [exerciseGroup,  setExerciseGroup]  = useState("");
-  const [calType,        setCalType]        = useState("normal");
+  const [calType,        setCalType]        = useState("heavy");
   const [selectedColor,  setSelectedColor]  = useState(PRESET_COLORS[0]);
   const [showCustom,     setShowCustom]     = useState(false);
   const [expandedCat,    setExpandedCat]    = useState(null);
@@ -103,7 +103,7 @@ export default function EditDayModal({ isOpen, onClose, dayIndex, schedule, save
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTypeName(dayObj.type || "");
     setExerciseGroup(dayObj.group || "");
-    setCalType(dayObj.calType || "normal");
+    setCalType(dayObj.calType || "heavy");
     setSelectedColor(dayObj.color || PRESET_COLORS[0]);
     setShowCustom(false);
     setExpandedCat(null);
@@ -116,7 +116,7 @@ export default function EditDayModal({ isOpen, onClose, dayIndex, schedule, save
     setExerciseGroup(opt.group || "");
     // Sugere calType automaticamente
     if (opt.group === null) setCalType("free");
-    else setCalType("normal");
+    else setCalType("heavy");
   };
 
   const handleSave = () => {
@@ -282,8 +282,7 @@ export default function EditDayModal({ isOpen, onClose, dayIndex, schedule, save
             </div>
             <div style={{ display:"flex", gap:6 }}>
               {[
-                { id:"normal", label:"Normal",   sub:"Dia padrão" },
-                { id:"heavy",  label:"Pesado 🏋️", sub:"+200 kcal" },
+                { id:"heavy",  label:"Pesado 🏋️", sub:"Dia de treino" },
                 { id:"free",   label:"Livre 🍕",  sub:"Sem controle" },
               ].map(c => (
                 <button key={c.id} onClick={() => setCalType(c.id)} style={{

@@ -114,11 +114,11 @@ const DEFAULT_EXERCISES = {
 // mesmo depois de o usuário apagá-lo (porque o preenchimento automático era reaplicado
 // a cada renderização), então a exclusão de divisões parecia não funcionar.
 const DEFAULT_SCHEDULE = [
-  { day: "Seg", type: "Push", color: "#f97316", calType: "normal", group: "Push" },
-  { day: "Ter", type: "Pull", color: "#3b82f6", calType: "normal", group: "Pull" },
+  { day: "Seg", type: "Push", color: "#f97316", calType: "heavy", group: "Push" },
+  { day: "Ter", type: "Pull", color: "#3b82f6", calType: "heavy", group: "Pull" },
   { day: "Qua", type: "Legs 🦵", color: "#8b5cf6", calType: "heavy", group: "Legs" },
-  { day: "Qui", type: "Jiu-Jitsu 🥋", color: "#10b981", calType: "normal", group: "Upper" },
-  { day: "Sex", type: "Upper", color: "#f59e0b", calType: "normal", group: "Upper" },
+  { day: "Qui", type: "Jiu-Jitsu 🥋", color: "#10b981", calType: "heavy", group: "Upper" },
+  { day: "Sex", type: "Upper", color: "#f59e0b", calType: "heavy", group: "Upper" },
   { day: "Sab", type: "Lower 🦵", color: "#ec4899", calType: "heavy", group: "Lower" },
   { day: "Dom", type: "Descanso 🍕", color: "#6b7280", calType: "free", group: null }
 ];
@@ -297,8 +297,22 @@ export default function Home() {
   const mergeLocalAndCloudState = (localState, cloudData) => {
     if (!cloudData) return localState;
 
+    // Rede de segurança por campo: se a nuvem voltou vazia especificamente pra um desses
+    // arrays (ex: só workout_logs, ou só food_logs) enquanto o dispositivo já tem dados
+    // reais salvos localmente pra esse mesmo campo, isso é suspeito demais pra confiar —
+    // prefere manter o que já existe localmente como base em vez de apagar. Sem isso, um
+    // problema passageiro numa ÚNICA consulta (as 9 rodam em paralelo, então qualquer
+    // uma pode falhar isoladamente) apagava só aquele tipo de dado silenciosamente — por
+    // isso às vezes sumiam só os treinos, ou só a dieta, sem padrão aparente.
+    const safeCloudArray = (cloudArr, localArr) => {
+      const cloud = cloudArr || [];
+      const local = localArr || [];
+      if (cloud.length === 0 && local.length > 0) return local;
+      return cloud;
+    };
+
     // 1. Food Logs
-    const mergedFoodLogs = [...(cloudData.foodLogs || [])];
+    const mergedFoodLogs = [...safeCloudArray(cloudData.foodLogs, localState.foodLogs)];
     const localUnsyncedFood = (localState.foodLogs || []).filter(l => typeof l.id === 'number');
     localUnsyncedFood.forEach(localLog => {
       const exists = mergedFoodLogs.some(dbLog => 
@@ -311,7 +325,7 @@ export default function Home() {
     });
 
     // 2. Workout Logs
-    const mergedWorkoutLogs = [...(cloudData.workoutLogs || [])];
+    const mergedWorkoutLogs = [...safeCloudArray(cloudData.workoutLogs, localState.workoutLogs)];
     const localUnsyncedWorkouts = (localState.workoutLogs || []).filter(w => typeof w.id === 'number');
     localUnsyncedWorkouts.forEach(localLog => {
       const exists = mergedWorkoutLogs.some(dbLog => 
@@ -322,7 +336,7 @@ export default function Home() {
     });
 
     // 3. Weight Logs
-    const mergedWeightLogs = [...(cloudData.weightLogs || [])];
+    const mergedWeightLogs = [...safeCloudArray(cloudData.weightLogs, localState.weightLogs)];
     const localUnsyncedWeight = (localState.weightLogs || []).filter(w => typeof w.id === 'number');
     localUnsyncedWeight.forEach(localLog => {
       const exists = mergedWeightLogs.some(dbLog => 
@@ -333,7 +347,7 @@ export default function Home() {
     });
 
     // 4. Custom Foods
-    const mergedCustomFoods = [...(cloudData.customFoods || [])];
+    const mergedCustomFoods = [...safeCloudArray(cloudData.customFoods, localState.customFoods)];
     (localState.customFoods || []).forEach(localFood => {
       const exists = mergedCustomFoods.some(dbFood => 
         dbFood.name.toLowerCase() === localFood.name.toLowerCase()
@@ -361,7 +375,7 @@ export default function Home() {
     };
 
     // 7. Progress Photos
-    const mergedProgressPhotos = [...(cloudData.progressPhotos || [])];
+    const mergedProgressPhotos = [...safeCloudArray(cloudData.progressPhotos, localState.progressPhotos)];
     (localState.progressPhotos || []).forEach(localPhoto => {
       const exists = mergedProgressPhotos.some(dbPhoto => dbPhoto.week === localPhoto.week);
       if (!exists) mergedProgressPhotos.push(localPhoto);
